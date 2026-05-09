@@ -715,8 +715,8 @@
 							</article>
 							<article class="node write" data-path="write" tabindex="0">
 								<strong class="node-title">hash and embed</strong>
-								<p>Trimmed content is hashed, deduped, then embedded.</p>
-								<div class="tooltip">Exact hash dedupe only. Embedding calls use the SDK consumer supplied Vercel AI embedding model.</div>
+								<p>Trimmed content is hashed, embedded, then deduped.</p>
+								<div class="tooltip">Exact normalized hashes are removed first. Embedded candidates are then skipped when a scoped existing fact or earlier candidate is above the similarity threshold, defaulting to 0.86.</div>
 							</article>
 							<article class="node fail" data-path="fail" tabindex="0">
 								<strong class="node-title">non-blocking failures</strong>
@@ -786,7 +786,8 @@
 									<li><span>Default mode tracks extraction in the background; <code>sync: true</code> awaits it for smoke tests and evals.</span></li>
 									<li><span>Extractor returns zero or more short atomic facts.</span></li>
 									<li><span>Content hash skips exact duplicates inside the user and agent scope.</span></li>
-									<li><span>New facts are embedded through the configured model and stored in <code>agents_memory_facts</code>.</span></li>
+									<li><span>Embeddings are compared against existing scoped facts and accepted candidates; matches above <code>dedupeSimilarityThreshold</code> are skipped.</span></li>
+									<li><span>New facts are stored in <code>agents_memory_facts</code>.</span></li>
 								</ol>
 							</article>
 
