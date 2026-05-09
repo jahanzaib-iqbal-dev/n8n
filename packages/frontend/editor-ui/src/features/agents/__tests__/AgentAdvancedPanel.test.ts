@@ -1,5 +1,5 @@
 /* eslint-disable import-x/no-extraneous-dependencies -- test-only pattern */
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { mount } from '@vue/test-utils';
 import { nextTick } from 'vue';
 import type * as VueUse from '@vueuse/core';
@@ -7,8 +7,16 @@ import type * as VueUse from '@vueuse/core';
 import AgentAdvancedPanel from '../components/AgentAdvancedPanel.vue';
 import type { AgentJsonConfig } from '../types';
 
+const { openModalWithDataMock } = vi.hoisted(() => ({
+	openModalWithDataMock: vi.fn(),
+}));
+
 vi.mock('@n8n/i18n', () => ({
 	useI18n: () => ({ baseText: (k: string) => k }),
+}));
+
+vi.mock('@/app/stores/ui.store', () => ({
+	useUIStore: () => ({ openModalWithData: openModalWithDataMock }),
 }));
 
 // Sub-control flips depend on debouncing — execute synchronously in the test.
@@ -66,6 +74,10 @@ function makeConfig(overrides: Partial<AgentJsonConfig> = {}): AgentJsonConfig {
 }
 
 describe('AgentAdvancedPanel', () => {
+	beforeEach(() => {
+		openModalWithDataMock.mockClear();
+	});
+
 	it('shows the budget-tokens sub-control for Anthropic when thinking is on', async () => {
 		const config = makeConfig({
 			config: { thinking: { provider: 'anthropic', budgetTokens: 1024 } },
@@ -127,5 +139,133 @@ describe('AgentAdvancedPanel', () => {
 		expect(toggle.attributes('disabled')).toBeDefined();
 		const concurrency = wrapper.find('[data-testid="agent-concurrency-input"]');
 		expect(concurrency.attributes('disabled')).toBeDefined();
+		const crossThreadMemoryToggle = wrapper.find(
+			'[data-testid="agent-cross-thread-memory-toggle"]',
+		);
+		expect(crossThreadMemoryToggle.attributes('disabled')).toBeDefined();
+	});
+
+	it('opens the credential modal without updating config when cross-thread memory is toggled on', async () => {
+		const config = makeConfig();
+		const wrapper = mount(AgentAdvancedPanel, {
+			props: { config },
+			global: { stubs: globalStubs },
+		});
+
+		await wrapper.find('[data-testid="agent-cross-thread-memory-toggle"]').trigger('click');
+
+		expect(openModalWithDataMock).toHaveBeenCalledWith({
+			name: 'agentCrossThreadMemoryCredentialModal',
+			data: expect.objectContaining({
+				initialValue: null,
+				onSelect: expect.any(Function),
+			}),
+		});
+		expect(wrapper.emitted('update:config')).toBeUndefined();
+	});
+
+	it('emits the cross-thread memory config after a credential is selected', async () => {
+		const config = makeConfig();
+		const wrapper = mount(AgentAdvancedPanel, {
+			props: { config },
+			global: { stubs: globalStubs },
+		});
+
+		await wrapper.find('[data-testid="agent-cross-thread-memory-toggle"]').trigger('click');
+		const payload = openModalWithDataMock.mock.calls[0][0] as {
+			data: { onSelect: (credentialId: string) => void };
+		};
+		payload.data.onSelect('credential-1');
+
+		expect(wrapper.emitted('update:config')).toEqual([
+			[
+				{
+					memory: {
+						enabled: true,
+						storage: 'n8n',
+						lastMessages: 10,
+						crossThreadFacts: {
+							enabled: true,
+							embedder: 'openai/text-embedding-3-small',
+							credential: 'credential-1',
+						},
+					},
+				},
+			],
+		]);
+	});
+
+	it('preserves existing memory config when enabling cross-thread memory', async () => {
+		const config = makeConfig({
+			memory: {
+				enabled: true,
+				storage: 'n8n',
+				lastMessages: 4,
+				semanticRecall: {
+					topK: 3,
+					scope: 'resource',
+				},
+			},
+		});
+		const wrapper = mount(AgentAdvancedPanel, {
+			props: { config },
+			global: { stubs: globalStubs },
+		});
+
+		await wrapper.find('[data-testid="agent-cross-thread-memory-toggle"]').trigger('click');
+		const payload = openModalWithDataMock.mock.calls[0][0] as {
+			data: { onSelect: (credentialId: string) => void };
+		};
+		payload.data.onSelect('credential-2');
+
+		const events = wrapper.emitted('update:config') ?? [];
+		expect(events[0][0]).toEqual({
+			memory: {
+				enabled: true,
+				storage: 'n8n',
+				lastMessages: 4,
+				semanticRecall: {
+					topK: 3,
+					scope: 'resource',
+				},
+				crossThreadFacts: {
+					enabled: true,
+					embedder: 'openai/text-embedding-3-small',
+					credential: 'credential-2',
+				},
+			},
+		});
+	});
+
+	it('emits disabled cross-thread memory config when toggled off', async () => {
+		const config = makeConfig({
+			memory: {
+				enabled: true,
+				storage: 'n8n',
+				lastMessages: 10,
+				crossThreadFacts: {
+					enabled: true,
+					embedder: 'openai/text-embedding-3-small',
+					credential: 'credential-1',
+				},
+			},
+		});
+		const wrapper = mount(AgentAdvancedPanel, {
+			props: { config },
+			global: { stubs: globalStubs },
+		});
+
+		await wrapper.find('[data-testid="agent-cross-thread-memory-toggle"]').trigger('click');
+
+		expect(openModalWithDataMock).not.toHaveBeenCalled();
+		const events = wrapper.emitted('update:config') ?? [];
+		expect(events[0][0]).toEqual({
+			memory: {
+				enabled: true,
+				storage: 'n8n',
+				lastMessages: 10,
+				crossThreadFacts: { enabled: false },
+			},
+		});
 	});
 });
