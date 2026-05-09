@@ -67,6 +67,8 @@ const N8N_CROSS_THREAD_MEMORY_DISABLED_INSTRUCTION = [
 	'If the user asks you to remember, recall, or persist facts across sessions, explain that cross-thread memory is not enabled yet and can be enabled in the Memory panel.',
 ].join(' ');
 
+const DEFAULT_CROSS_THREAD_FACTS_EMBEDDER = 'openai/text-embedding-3-small';
+
 export interface BuildFromJsonOptions {
 	/** Executes custom tool handlers inside isolates. */
 	toolExecutor: ToolExecutor;
@@ -379,7 +381,7 @@ async function resolveCrossThreadFactsConfig(
 	config: Extract<NonNullable<AgentJsonMemoryConfig['crossThreadFacts']>, { enabled: true }>,
 	credentialProvider: CredentialProvider,
 ) {
-	const providerPrefix = getProviderPrefix(config.embedder);
+	const providerPrefix = getProviderPrefix(DEFAULT_CROSS_THREAD_FACTS_EMBEDDER);
 	const raw = await credentialProvider.resolve(config.credential);
 	const mapped = mapCredentialForProvider(providerPrefix, raw);
 
@@ -394,8 +396,8 @@ async function resolveCrossThreadFactsConfig(
 		...(config.dedupeSimilarityThreshold !== undefined && {
 			dedupeSimilarityThreshold: config.dedupeSimilarityThreshold,
 		}),
-		embedder: createEmbeddingModel(config.embedder, mapped),
-		embeddingModel: config.embedder,
+		embedder: createEmbeddingModel(DEFAULT_CROSS_THREAD_FACTS_EMBEDDER, mapped),
+		embeddingModel: DEFAULT_CROSS_THREAD_FACTS_EMBEDDER,
 		...(config.prompts !== undefined && { prompts: config.prompts }),
 	};
 }

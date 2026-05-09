@@ -16,7 +16,6 @@ export const AGENT_ADD_TRIGGER_MODAL_KEY = 'agentAddTriggerModal';
 export const AGENT_CROSS_THREAD_MEMORY_CREDENTIAL_MODAL_KEY =
 	'agentCrossThreadMemoryCredentialModal';
 export const AGENT_CROSS_THREAD_MEMORY_CREDENTIAL_TYPE = 'openAiApi';
-export const AGENT_CROSS_THREAD_MEMORY_EMBEDDER = 'openai/text-embedding-3-small';
 
 /** Synthetic tree key for the combined "Agent" panel (name/model/credential/instructions). */
 export const AGENT_SECTION_KEY = '__agent';

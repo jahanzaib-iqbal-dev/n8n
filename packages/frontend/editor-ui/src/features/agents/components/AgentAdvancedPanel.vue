@@ -24,10 +24,7 @@ import { useI18n } from '@n8n/i18n';
 
 import { useUIStore } from '@/app/stores/ui.store';
 import type { AgentJsonConfig } from '../types';
-import {
-	AGENT_CROSS_THREAD_MEMORY_CREDENTIAL_MODAL_KEY,
-	AGENT_CROSS_THREAD_MEMORY_EMBEDDER,
-} from '../constants';
+import { AGENT_CROSS_THREAD_MEMORY_CREDENTIAL_MODAL_KEY } from '../constants';
 import {
 	PROVIDER_CAPABILITIES,
 	REASONING_EFFORT_OPTIONS,
@@ -145,7 +142,6 @@ function enableCrossThreadMemory(credentialId: string) {
 		lastMessages: existingMemory?.lastMessages ?? 10,
 		crossThreadFacts: {
 			enabled: true,
-			embedder: AGENT_CROSS_THREAD_MEMORY_EMBEDDER,
 			credential: credentialId,
 		},
 	};

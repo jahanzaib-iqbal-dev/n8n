@@ -617,7 +617,6 @@ describe('buildFromJson()', () => {
 				storage: 'n8n',
 				crossThreadFacts: {
 					enabled: true,
-					embedder: 'openai/text-embedding-3-small',
 					credential: 'openai-embedding-credential',
 					topK: 7,
 					autoInject: false,

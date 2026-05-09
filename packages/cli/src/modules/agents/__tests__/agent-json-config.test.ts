@@ -183,14 +183,13 @@ describe('AgentJsonConfigSchema — memory.observationalMemory', () => {
 describe('AgentJsonConfigSchema — memory.crossThreadFacts', () => {
 	const memoryBase = { enabled: true, storage: 'n8n' as const };
 
-	it('accepts cross-thread facts with an embedding model and credential reference', () => {
+	it('accepts cross-thread facts with a credential reference', () => {
 		const parsed = AgentJsonConfigSchema.safeParse({
 			...baseConfig,
 			memory: {
 				...memoryBase,
 				crossThreadFacts: {
 					enabled: true,
-					embedder: 'openai/text-embedding-3-small',
 					credential: 'openai-credential-id',
 					topK: 8,
 					autoInject: false,
@@ -232,7 +231,6 @@ describe('AgentJsonConfigSchema — memory.crossThreadFacts', () => {
 				...memoryBase,
 				crossThreadFacts: {
 					enabled: true,
-					embedder: 'openai/text-embedding-3-small',
 					credential: 'openai-credential-id',
 					dedupeSimilarityThreshold: false,
 				},
@@ -249,7 +247,6 @@ describe('AgentJsonConfigSchema — memory.crossThreadFacts', () => {
 				...memoryBase,
 				crossThreadFacts: {
 					enabled: true,
-					embedder: 'openai/text-embedding-3-small',
 					credential: 'openai-credential-id',
 					dedupeSimilarityThreshold: -0.1,
 				},
@@ -266,7 +263,6 @@ describe('AgentJsonConfigSchema — memory.crossThreadFacts', () => {
 				...memoryBase,
 				crossThreadFacts: {
 					enabled: true,
-					embedder: 'openai/text-embedding-3-small',
 					credential: 'openai-credential-id',
 					dedupeSimilarityThreshold: 1.1,
 				},
@@ -283,22 +279,6 @@ describe('AgentJsonConfigSchema — memory.crossThreadFacts', () => {
 				...memoryBase,
 				crossThreadFacts: {
 					enabled: true,
-					embedder: 'openai/text-embedding-3-small',
-				},
-			},
-		});
-
-		expect(parsed.success).toBe(false);
-	});
-
-	it('rejects enabled cross-thread facts without an embedding model', () => {
-		const parsed = AgentJsonConfigSchema.safeParse({
-			...baseConfig,
-			memory: {
-				...memoryBase,
-				crossThreadFacts: {
-					enabled: true,
-					credential: 'openai-credential-id',
 				},
 			},
 		});

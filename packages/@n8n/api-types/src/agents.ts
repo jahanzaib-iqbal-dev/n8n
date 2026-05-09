@@ -184,7 +184,6 @@ export interface AgentJsonConfig {
 					maxFactsPerTurn?: number;
 					maxFactLength?: number;
 					dedupeSimilarityThreshold?: number | false;
-					embedder: string;
 					credential: string;
 					prompts?: {
 						extraction?: string;

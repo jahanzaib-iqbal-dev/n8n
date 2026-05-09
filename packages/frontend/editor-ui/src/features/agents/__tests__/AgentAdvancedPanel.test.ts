@@ -186,7 +186,6 @@ describe('AgentAdvancedPanel', () => {
 						lastMessages: 10,
 						crossThreadFacts: {
 							enabled: true,
-							embedder: 'openai/text-embedding-3-small',
 							credential: 'credential-1',
 						},
 					},
@@ -230,7 +229,6 @@ describe('AgentAdvancedPanel', () => {
 				},
 				crossThreadFacts: {
 					enabled: true,
-					embedder: 'openai/text-embedding-3-small',
 					credential: 'credential-2',
 				},
 			},
@@ -245,7 +243,6 @@ describe('AgentAdvancedPanel', () => {
 				lastMessages: 10,
 				crossThreadFacts: {
 					enabled: true,
-					embedder: 'openai/text-embedding-3-small',
 					credential: 'credential-1',
 				},
 			},
