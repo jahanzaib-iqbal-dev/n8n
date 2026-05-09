@@ -2,6 +2,7 @@ import type {
 	BuiltAgent,
 	BuiltTool,
 	CredentialProvider,
+	CrossThreadFact,
 	StreamChunk,
 	ToolDescriptor,
 } from '@n8n/agents';
@@ -10,6 +11,9 @@ import {
 	AGENT_WORKFLOW_TRIGGER_TYPE,
 	isAgentCredentialIntegration,
 	isAgentScheduleIntegration,
+	type AgentMemoryFactDto,
+	type AgentMemoryFactsResponse,
+	type AgentMemoryFactSourceThreadDto,
 	type AgentSkill,
 	type AgentSkillMutationResponse,
 	type ChatIntegrationDescriptor,
@@ -55,6 +59,7 @@ import { AgentSkillsService } from './agent-skills.service';
 import { AgentsToolsService } from './agents-tools.service';
 import { AGENT_THREAD_PREFIX } from './builder/builder-tool-names';
 import { Agent } from './entities/agent.entity';
+import type { AgentExecutionThread } from './entities/agent-execution-thread.entity';
 import { ExecutionRecorder } from './execution-recorder';
 import { ChatIntegrationRegistry } from './integrations/agent-chat-integration';
 import { syncAgentIntegrations } from './integrations/integrations-sync';
@@ -94,6 +99,32 @@ interface InjectRuntimeDependenciesParams {
 export function chatThreadId(agentId: string, userId?: string): string {
 	const baseThreadId = `${AGENT_THREAD_PREFIX.TEST}${agentId}`;
 	return userId ? `${baseThreadId}:${userId}` : baseThreadId;
+}
+
+function toAgentMemoryFactDto(fact: CrossThreadFact): AgentMemoryFactDto {
+	return {
+		id: fact.id,
+		content: fact.content,
+		contentHash: fact.contentHash,
+		createdAt: fact.createdAt.toISOString(),
+		updatedAt: fact.updatedAt.toISOString(),
+		...(fact.sourceThreadId !== undefined && { sourceThreadId: fact.sourceThreadId }),
+		...(fact.sourceMessageId !== undefined && { sourceMessageId: fact.sourceMessageId }),
+		...(fact.embeddingModel !== undefined && { embeddingModel: fact.embeddingModel }),
+	};
+}
+
+function toAgentMemoryFactSourceThreadDto(
+	thread: AgentExecutionThread,
+): AgentMemoryFactSourceThreadDto {
+	return {
+		id: thread.id,
+		title: thread.title,
+		emoji: thread.emoji,
+		sessionNumber: thread.sessionNumber,
+		createdAt: thread.createdAt.toISOString(),
+		updatedAt: thread.updatedAt.toISOString(),
+	};
 }
 
 /** Scopes the agent's memory to a specific conversation context. */
@@ -242,6 +273,35 @@ export class AgentsService {
 				icon: i.displayIcon,
 				credentialTypes: i.credentialTypes,
 			}));
+	}
+
+	async getMemoryFacts(
+		projectId: string,
+		agentId: string,
+		resourceId: string,
+	): Promise<AgentMemoryFactsResponse | null> {
+		const agent = await this.agentRepository.findByIdAndProjectId(agentId, projectId);
+		if (!agent) return null;
+
+		const facts = await this.n8nMemory.listCrossThreadFacts({ agentId, resourceId });
+		const sourceThreadIds = [
+			...new Set(
+				facts
+					.map((fact) => fact.sourceThreadId)
+					.filter((threadId): threadId is string => threadId !== undefined),
+			),
+		];
+		const sourceThreads = await this.agentExecutionService.getSourceThreadsForAgent(
+			projectId,
+			agentId,
+			sourceThreadIds,
+		);
+
+		return {
+			scope: { agentId, resourceId },
+			facts: facts.map(toAgentMemoryFactDto),
+			sourceThreads: sourceThreads.map(toAgentMemoryFactSourceThreadDto),
+		};
 	}
 
 	async create(projectId: string, name: string): Promise<Agent> {

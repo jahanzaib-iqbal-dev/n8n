@@ -478,6 +478,37 @@ describe('N8nMemory', () => {
 			});
 			expect(result.map((fact) => fact.id)).toEqual(['target']);
 		});
+
+		it('lists facts only within the agentId and resourceId scope without exposing ranking', async () => {
+			memoryFactRepository.find.mockResolvedValue([
+				makeFactEntity({ id: 'fact-1' }),
+				makeFactEntity({
+					id: 'fact-2',
+					content: 'The user works from Melbourne.',
+					contentHash: 'hash-2',
+					sourceThreadId: null,
+				}),
+			]);
+
+			const result = await memory.listCrossThreadFacts({
+				agentId: 'agent-1',
+				resourceId: 'user-1',
+			});
+
+			expect(memoryFactRepository.find).toHaveBeenCalledWith({
+				where: { agentId: 'agent-1', resourceId: 'user-1' },
+				order: { createdAt: 'ASC' },
+			});
+			expect(result).toEqual([
+				expect.objectContaining({ id: 'fact-1', contentHash: 'hash-1' }),
+				expect.objectContaining({
+					id: 'fact-2',
+					content: 'The user works from Melbourne.',
+					sourceThreadId: undefined,
+				}),
+			]);
+			expect(result[0]).not.toHaveProperty('finalScore');
+		});
 	});
 
 	describe('working memory — thread scope', () => {

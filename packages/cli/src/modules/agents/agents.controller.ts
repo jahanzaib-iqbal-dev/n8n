@@ -291,6 +291,17 @@ export class AgentsController {
 		return { success: true };
 	}
 
+	@Get('/:agentId/memory/facts')
+	@ProjectScope('agent:read')
+	async getMemoryFacts(req: AuthenticatedRequest<{ projectId: string; agentId: string }>) {
+		const { projectId, agentId } = req.params;
+		const result = await this.agentsService.getMemoryFacts(projectId, agentId, req.user.id);
+		if (!result) {
+			throw new NotFoundError(`Agent "${agentId}" not found`);
+		}
+		return result;
+	}
+
 	@Get('/:agentId')
 	@ProjectScope('agent:read')
 	async get(

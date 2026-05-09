@@ -10,6 +10,7 @@ import AgentCapabilitiesSection from './AgentCapabilitiesSection.vue';
 import AgentIdentityHeader from './AgentIdentityHeader.vue';
 import AgentInfoPanel from './AgentInfoPanel.vue';
 import AgentJsonEditor from './AgentJsonEditor.vue';
+import AgentMemoryGraphPanel from './AgentMemoryGraphPanel.vue';
 import AgentMemoryPanel from './AgentMemoryPanel.vue';
 import AgentPanelHeader from './AgentPanelHeader.vue';
 
@@ -58,6 +59,11 @@ const i18n = useI18n();
 						:config="localConfig"
 						:disabled="isBuildChatStreaming"
 						@update:config="emit('update:config', $event)"
+					/>
+					<AgentPanelHeader
+						v-else-if="activeMainTab === 'memory'"
+						:title="i18n.baseText('agents.builder.header.tab.memory')"
+						:description="i18n.baseText('agents.builder.memoryGraph.description')"
 					/>
 					<AgentPanelHeader
 						v-else-if="activeMainTab === 'executions'"
@@ -137,6 +143,13 @@ const i18n = useI18n();
 					data-testid="agent-executions-panel"
 				/>
 
+				<AgentMemoryGraphPanel
+					v-else-if="activeMainTab === 'memory'"
+					:project-id="projectId"
+					:agent-id="agentId"
+					:cross-thread-memory-enabled="localConfig?.memory?.crossThreadFacts?.enabled === true"
+				/>
+
 				<div v-else-if="activeMainTab === 'raw'" :class="$style.rawPanel">
 					<AgentJsonEditor
 						:value="localConfig"
@@ -146,7 +159,7 @@ const i18n = useI18n();
 					/>
 				</div>
 
-				<div v-else data-testid="agent-evaluations-panel">
+				<div v-else-if="activeMainTab === 'evaluations'" data-testid="agent-evaluations-panel">
 					<div :class="$style.panel">
 						<N8nHeading size="medium">
 							{{ i18n.baseText('agents.builder.header.tab.evaluations') }}

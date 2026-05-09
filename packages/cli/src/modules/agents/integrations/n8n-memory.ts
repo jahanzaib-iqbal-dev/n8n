@@ -238,6 +238,15 @@ export class N8nMemory implements BuiltMemory, BuiltObservationStore {
 		return rankedFacts;
 	}
 
+	async listCrossThreadFacts(scope: CrossThreadMemoryScope): Promise<CrossThreadFact[]> {
+		const entities = await this.memoryFactRepository.find({
+			where: { agentId: scope.agentId, resourceId: scope.resourceId },
+			order: { createdAt: 'ASC' },
+		});
+
+		return entities.map((entity) => this.toCrossThreadFact(entity));
+	}
+
 	// ── Working memory ───────────────────────────────────────────────────
 
 	async getWorkingMemory(params: {

@@ -1,5 +1,5 @@
 import { Service } from '@n8n/di';
-import { DataSource, LessThan, Repository } from '@n8n/typeorm';
+import { DataSource, In, LessThan, Repository } from '@n8n/typeorm';
 
 import { AgentExecutionThread } from '../entities/agent-execution-thread.entity';
 
@@ -107,6 +107,23 @@ export class AgentExecutionThreadRepository extends Repository<AgentExecutionThr
 			threads,
 			nextCursor: hasMore ? threads[threads.length - 1].updatedAt.toISOString() : null,
 		};
+	}
+
+	async findByIdsForProjectAndAgent(
+		threadIds: string[],
+		projectId: string,
+		agentId: string,
+	): Promise<AgentExecutionThread[]> {
+		if (threadIds.length === 0) return [];
+
+		return await this.find({
+			where: {
+				id: In(threadIds),
+				projectId,
+				agentId,
+			},
+			order: { createdAt: 'ASC' },
+		});
 	}
 
 	/** Bump updatedAt to now so the thread sorts to top of the list. */

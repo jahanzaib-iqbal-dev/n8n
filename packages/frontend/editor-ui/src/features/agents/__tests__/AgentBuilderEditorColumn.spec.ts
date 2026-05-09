@@ -10,6 +10,8 @@ vi.mock('@n8n/i18n', () => ({
 				'agents.builder.memory.description':
 					'Keeps recent messages from this session available as context.',
 				'agents.builder.editorColumn.ariaLabel': 'Agent editor',
+				'agents.builder.header.tab.memory': 'Memory',
+				'agents.builder.memoryGraph.description': 'Inspect memory facts.',
 			})[key] ?? key,
 	}),
 }));
@@ -22,14 +24,17 @@ vi.mock('@n8n/design-system', () => ({
 	N8nText: { template: '<span><slot /></span>', props: ['tag', 'bold', 'size', 'color'] },
 }));
 
-async function mountColumn() {
+async function mountColumn(overrides: { activeMainTab?: 'agent' | 'memory' } = {}) {
 	const { default: AgentBuilderEditorColumn } = await import(
 		'../components/AgentBuilderEditorColumn.vue'
 	);
 	return mount(AgentBuilderEditorColumn, {
 		props: {
-			activeMainTab: 'agent',
-			mainTabOptions: [{ label: 'Agent', value: 'agent' }],
+			activeMainTab: overrides.activeMainTab ?? 'agent',
+			mainTabOptions: [
+				{ label: 'Agent', value: 'agent' },
+				{ label: 'Memory', value: 'memory' },
+			],
 			localConfig: {
 				name: 'Agent',
 				model: 'anthropic/claude-sonnet-4-5',
@@ -52,6 +57,10 @@ async function mountColumn() {
 				AgentPanelHeader: true,
 				AgentAdvancedPanel: true,
 				AgentSessionsListView: true,
+				AgentMemoryGraphPanel: {
+					template: '<div data-test-id="stub-memory-graph" />',
+					props: ['projectId', 'agentId', 'crossThreadMemoryEnabled'],
+				},
 			},
 		},
 	});
@@ -67,5 +76,11 @@ describe('AgentBuilderEditorColumn', () => {
 		);
 		expect(wrapper.text()).not.toContain('Automatic memory');
 		expect(wrapper.find('[data-test-id="agent-observational-memory-toggle"]').exists()).toBe(false);
+	});
+
+	it('renders the memory graph panel in the Memory tab', async () => {
+		const wrapper = await mountColumn({ activeMainTab: 'memory' });
+
+		expect(wrapper.find('[data-test-id="stub-memory-graph"]').exists()).toBe(true);
 	});
 });

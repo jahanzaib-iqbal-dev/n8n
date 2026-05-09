@@ -24,6 +24,8 @@ export const AGENT_SECTION_KEY = '__agent';
 export const ADVANCED_SECTION_KEY = '__advanced';
 /** Synthetic tree key for the evaluations list panel. */
 export const EVALS_SECTION_KEY = '__evals';
+/** Synthetic tree key for the memory graph tab. */
+export const MEMORY_SECTION_KEY = '__memory';
 /** Synthetic tree key for the full raw config.json view. */
 export const CONFIG_JSON_SECTION_KEY = '__config_json';
 /** Synthetic tree key for the agent executions tab. */

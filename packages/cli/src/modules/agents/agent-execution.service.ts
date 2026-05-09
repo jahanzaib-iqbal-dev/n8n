@@ -241,6 +241,20 @@ export class AgentExecutionService {
 		return { thread, executions, workingMemory };
 	}
 
+	async getSourceThreadsForAgent(
+		projectId: string,
+		agentId: string,
+		threadIds: string[],
+	): Promise<AgentExecutionThread[]> {
+		if (threadIds.length === 0) return [];
+
+		return await this.agentExecutionThreadRepository.findByIdsForProjectAndAgent(
+			threadIds,
+			projectId,
+			agentId,
+		);
+	}
+
 	/**
 	 * Fetch a thread by id without scoping. Callers accepting a client-supplied
 	 * threadId MUST verify ownership with {@link threadBelongsTo} before use to

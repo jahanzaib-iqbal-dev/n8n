@@ -962,4 +962,114 @@ describe('AgentsService', () => {
 			await expect(service.delete(agentId, projectId)).resolves.toBe(true);
 		});
 	});
+
+	describe('getMemoryFacts', () => {
+		const createdAt = new Date('2026-05-09T10:00:00.000Z');
+		const updatedAt = new Date('2026-05-09T10:05:00.000Z');
+
+		beforeEach(() => {
+			agentRepository.findByIdAndProjectId.mockResolvedValue(makeAgent());
+			n8nMemory.listCrossThreadFacts.mockResolvedValue([]);
+			agentExecutionService.getSourceThreadsForAgent.mockResolvedValue([]);
+		});
+
+		it('returns facts scoped to agentId and the current user resourceId', async () => {
+			n8nMemory.listCrossThreadFacts.mockResolvedValue([
+				{
+					id: 'fact-1',
+					agentId,
+					resourceId: userId,
+					content: 'The user prefers terse answers.',
+					contentHash: 'hash-1',
+					createdAt,
+					updatedAt,
+					sourceThreadId: 'thread-1',
+					sourceMessageId: 'message-1',
+					embedding: [0.1, 0.2],
+					embeddingModel: 'openai/text-embedding-3-small',
+				},
+			]);
+			agentExecutionService.getSourceThreadsForAgent.mockResolvedValue([
+				{
+					id: 'thread-1',
+					agentId,
+					projectId,
+					agentName: 'Agent',
+					title: 'Preferences',
+					emoji: null,
+					sessionNumber: 3,
+					totalPromptTokens: 0,
+					totalCompletionTokens: 0,
+					totalCost: 0,
+					totalDuration: 0,
+					createdAt,
+					updatedAt,
+				} as never,
+			]);
+
+			const result = await service.getMemoryFacts(projectId, agentId, userId);
+
+			expect(n8nMemory.listCrossThreadFacts).toHaveBeenCalledWith({ agentId, resourceId: userId });
+			expect(result).toEqual({
+				scope: { agentId, resourceId: userId },
+				facts: [
+					{
+						id: 'fact-1',
+						content: 'The user prefers terse answers.',
+						contentHash: 'hash-1',
+						createdAt: createdAt.toISOString(),
+						updatedAt: updatedAt.toISOString(),
+						sourceThreadId: 'thread-1',
+						sourceMessageId: 'message-1',
+						embeddingModel: 'openai/text-embedding-3-small',
+					},
+				],
+				sourceThreads: [
+					{
+						id: 'thread-1',
+						title: 'Preferences',
+						emoji: null,
+						sessionNumber: 3,
+						createdAt: createdAt.toISOString(),
+						updatedAt: updatedAt.toISOString(),
+					},
+				],
+			});
+		});
+
+		it('returns null for an agent outside the project and does not read facts', async () => {
+			agentRepository.findByIdAndProjectId.mockResolvedValue(null);
+
+			const result = await service.getMemoryFacts(projectId, agentId, userId);
+
+			expect(result).toBeNull();
+			expect(n8nMemory.listCrossThreadFacts).not.toHaveBeenCalled();
+		});
+
+		it('does not include source thread metadata outside the requested project and agent', async () => {
+			n8nMemory.listCrossThreadFacts.mockResolvedValue([
+				{
+					id: 'fact-1',
+					agentId,
+					resourceId: userId,
+					content: 'The user prefers terse answers.',
+					contentHash: 'hash-1',
+					createdAt,
+					updatedAt,
+					sourceThreadId: 'thread-1',
+				},
+			]);
+			agentExecutionService.getSourceThreadsForAgent.mockResolvedValue([]);
+
+			const result = await service.getMemoryFacts(projectId, agentId, userId);
+
+			expect(agentExecutionService.getSourceThreadsForAgent).toHaveBeenCalledWith(
+				projectId,
+				agentId,
+				['thread-1'],
+			);
+			expect(result?.sourceThreads).toEqual([]);
+			expect(result?.facts[0].sourceThreadId).toBe('thread-1');
+		});
+	});
 });

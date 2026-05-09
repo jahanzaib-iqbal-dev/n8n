@@ -87,4 +87,36 @@ describe('AgentExecutionService', () => {
 			expect(agentExecutionRepository.findByThreadIdOrdered).not.toHaveBeenCalled();
 		});
 	});
+
+	describe('getSourceThreadsForAgent', () => {
+		it('loads source threads only for the requested project and agent', async () => {
+			const threads = [
+				makeThread({
+					id: 'thread-1',
+					title: 'Preferences',
+					sessionNumber: 7,
+				}),
+			];
+			agentExecutionThreadRepository.findByIdsForProjectAndAgent.mockResolvedValue(threads);
+
+			const result = await service.getSourceThreadsForAgent('project-1', 'agent-1', [
+				'thread-1',
+				'other-thread',
+			]);
+
+			expect(agentExecutionThreadRepository.findByIdsForProjectAndAgent).toHaveBeenCalledWith(
+				['thread-1', 'other-thread'],
+				'project-1',
+				'agent-1',
+			);
+			expect(result).toEqual(threads);
+		});
+
+		it('does not query source threads when there are no source ids', async () => {
+			const result = await service.getSourceThreadsForAgent('project-1', 'agent-1', []);
+
+			expect(result).toEqual([]);
+			expect(agentExecutionThreadRepository.findByIdsForProjectAndAgent).not.toHaveBeenCalled();
+		});
+	});
 });

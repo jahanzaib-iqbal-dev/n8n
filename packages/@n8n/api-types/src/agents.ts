@@ -89,6 +89,35 @@ export interface AgentIntegrationStatusResponse {
 	integrations: AgentIntegrationStatusEntry[];
 }
 
+export interface AgentMemoryFactDto {
+	id: string;
+	content: string;
+	contentHash: string;
+	createdAt: string;
+	updatedAt: string;
+	sourceThreadId?: string;
+	sourceMessageId?: string;
+	embeddingModel?: string;
+}
+
+export interface AgentMemoryFactSourceThreadDto {
+	id: string;
+	title: string | null;
+	emoji: string | null;
+	sessionNumber: number;
+	createdAt: string;
+	updatedAt: string;
+}
+
+export interface AgentMemoryFactsResponse {
+	scope: {
+		agentId: string;
+		resourceId: string;
+	};
+	facts: AgentMemoryFactDto[];
+	sourceThreads: AgentMemoryFactSourceThreadDto[];
+}
+
 export function isAgentScheduleIntegration(
 	integration: AgentIntegration | null | undefined,
 ): integration is AgentScheduleIntegration {

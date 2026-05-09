@@ -1,6 +1,7 @@
 import type {
 	AgentBuilderMessagesResponse,
 	AgentIntegrationStatusResponse,
+	AgentMemoryFactsResponse,
 	AgentPersistedMessageDto,
 	AgentSkill,
 	AgentSkillMutationResponse,
@@ -108,6 +109,18 @@ export const getIntegrationStatus = async (
 		context,
 		'GET',
 		`/projects/${projectId}/agents/v2/${agentId}/integrations/status`,
+	);
+};
+
+export const getAgentMemoryFacts = async (
+	context: IRestApiContext,
+	projectId: string,
+	agentId: string,
+): Promise<AgentMemoryFactsResponse> => {
+	return await makeRestApiRequest<AgentMemoryFactsResponse>(
+		context,
+		'GET',
+		`/projects/${projectId}/agents/v2/${agentId}/memory/facts`,
 	);
 };
 
