@@ -98,12 +98,15 @@ describe('buildFromJson()', () => {
 					crossThreadFacts?: {
 						enabled?: boolean;
 						topK?: number;
+						autoInject?: boolean;
+						autoInjectTopK?: number;
 						dedupeSimilarityThreshold?: number | false;
 						embeddingModel?: string;
 						embedder?: unknown;
 						prompts?: {
 							extraction?: string;
 							recallToolInstruction?: string;
+							injection?: string;
 						};
 					};
 				};
@@ -617,10 +620,13 @@ describe('buildFromJson()', () => {
 					embedder: 'openai/text-embedding-3-small',
 					credential: 'openai-embedding-credential',
 					topK: 7,
+					autoInject: false,
+					autoInjectTopK: 4,
 					dedupeSimilarityThreshold: 0.86,
 					prompts: {
 						extraction: 'Extract durable facts.',
 						recallToolInstruction: 'Use recall_memory before answering memory questions.',
+						injection: 'Use these facts when relevant.',
 					},
 				},
 			},
@@ -642,11 +648,14 @@ describe('buildFromJson()', () => {
 		expect(getMemoryConfig(agent)?.crossThreadFacts).toMatchObject({
 			enabled: true,
 			topK: 7,
+			autoInject: false,
+			autoInjectTopK: 4,
 			dedupeSimilarityThreshold: 0.86,
 			embeddingModel: 'openai/text-embedding-3-small',
 			prompts: {
 				extraction: 'Extract durable facts.',
 				recallToolInstruction: 'Use recall_memory before answering memory questions.',
+				injection: 'Use these facts when relevant.',
 			},
 		});
 		expect(getMemoryConfig(agent)?.crossThreadFacts?.embedder).toBeDefined();

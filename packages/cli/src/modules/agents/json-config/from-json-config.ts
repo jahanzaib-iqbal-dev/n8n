@@ -386,6 +386,8 @@ async function resolveCrossThreadFactsConfig(
 	return {
 		enabled: true,
 		...(config.topK !== undefined && { topK: config.topK }),
+		...(config.autoInject !== undefined && { autoInject: config.autoInject }),
+		...(config.autoInjectTopK !== undefined && { autoInjectTopK: config.autoInjectTopK }),
 		...(config.halfLifeDays !== undefined && { halfLifeDays: config.halfLifeDays }),
 		...(config.maxFactsPerTurn !== undefined && { maxFactsPerTurn: config.maxFactsPerTurn }),
 		...(config.maxFactLength !== undefined && { maxFactLength: config.maxFactLength }),

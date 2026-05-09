@@ -193,16 +193,36 @@ describe('AgentJsonConfigSchema — memory.crossThreadFacts', () => {
 					embedder: 'openai/text-embedding-3-small',
 					credential: 'openai-credential-id',
 					topK: 8,
+					autoInject: false,
+					autoInjectTopK: 4,
 					dedupeSimilarityThreshold: 0.86,
 					prompts: {
 						extraction: 'Extract only durable user facts.',
 						recallToolInstruction: 'Use recall_memory when facts may help.',
+						injection: 'Use these surfaced facts if relevant.',
 					},
 				},
 			},
 		});
 
 		expect(parsed.success).toBe(true);
+	});
+
+	it('rejects invalid cross-thread fact auto-inject topK values', () => {
+		const parsed = AgentJsonConfigSchema.safeParse({
+			...baseConfig,
+			memory: {
+				...memoryBase,
+				crossThreadFacts: {
+					enabled: true,
+					embedder: 'openai/text-embedding-3-small',
+					credential: 'openai-credential-id',
+					autoInjectTopK: 0,
+				},
+			},
+		});
+
+		expect(parsed.success).toBe(false);
 	});
 
 	it('accepts disabled cross-thread fact similarity dedupe', () => {

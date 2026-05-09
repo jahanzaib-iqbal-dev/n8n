@@ -37,12 +37,15 @@ const ObservationalMemoryConfigSchema = z.object({
 const CrossThreadFactPromptsSchema = z.object({
 	extraction: z.string().optional(),
 	recallToolInstruction: z.string().optional(),
+	injection: z.string().optional(),
 });
 
 const CrossThreadFactsConfigSchema = z.discriminatedUnion('enabled', [
 	z.object({
 		enabled: z.literal(true),
 		topK: z.number().int().min(1).max(100).optional(),
+		autoInject: z.boolean().optional(),
+		autoInjectTopK: z.number().int().min(1).max(100).optional(),
 		halfLifeDays: z.number().int().min(1).optional(),
 		maxFactsPerTurn: z.number().int().min(1).max(20).optional(),
 		maxFactLength: z.number().int().min(40).max(2000).optional(),

@@ -178,6 +178,8 @@ export interface AgentJsonConfig {
 			| {
 					enabled: true;
 					topK?: number;
+					autoInject?: boolean;
+					autoInjectTopK?: number;
 					halfLifeDays?: number;
 					maxFactsPerTurn?: number;
 					maxFactLength?: number;
@@ -187,6 +189,7 @@ export interface AgentJsonConfig {
 					prompts?: {
 						extraction?: string;
 						recallToolInstruction?: string;
+						injection?: string;
 					};
 			  }
 			| {
