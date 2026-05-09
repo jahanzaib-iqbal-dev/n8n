@@ -1,0 +1,873 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1" />
+	<title>Cross-Thread Fact Memory</title>
+	<style>
+		:root {
+			color-scheme: light;
+			--paper: #f3efe4;
+			--paper-2: #fffaf0;
+			--ink: #171512;
+			--muted: #625d51;
+			--line: #262016;
+			--grid: rgba(23, 21, 18, 0.08);
+			--write: #178f61;
+			--write-soft: #d9f4e4;
+			--read: #1b74b7;
+			--read-soft: #dcecf7;
+			--fail: #c64234;
+			--fail-soft: #f6ddd8;
+			--scope: #8d5a09;
+			--scope-soft: #f3e2bd;
+			--neutral: #e8dfcb;
+			--shadow: 0 16px 40px rgba(35, 27, 15, 0.14);
+			--radius: 8px;
+			--mono: "SFMono-Regular", "Cascadia Mono", "Liberation Mono", Menlo, monospace;
+			--sans: Optima, Candara, "Avenir Next", "Segoe UI", sans-serif;
+		}
+
+		* {
+			box-sizing: border-box;
+		}
+
+		html {
+			scroll-behavior: smooth;
+		}
+
+		body {
+			margin: 0;
+			min-width: 320px;
+			background:
+				linear-gradient(90deg, var(--grid) 1px, transparent 1px),
+				linear-gradient(0deg, var(--grid) 1px, transparent 1px),
+				radial-gradient(circle at 16% 12%, rgba(255, 196, 81, 0.25), transparent 28rem),
+				radial-gradient(circle at 84% 22%, rgba(27, 116, 183, 0.18), transparent 26rem),
+				var(--paper);
+			background-size: 28px 28px, 28px 28px, auto, auto, auto;
+			color: var(--ink);
+			font-family: var(--sans);
+			line-height: 1.45;
+		}
+
+		button,
+		input {
+			font: inherit;
+		}
+
+		code {
+			font-family: var(--mono);
+			font-size: 0.92em;
+		}
+
+		.shell {
+			width: min(1540px, calc(100vw - 32px));
+			margin: 0 auto;
+			padding: 28px 0 44px;
+		}
+
+		.header {
+			display: grid;
+			grid-template-columns: minmax(0, 1fr) auto;
+			gap: 24px;
+			align-items: end;
+			padding: 24px 0 20px;
+			border-bottom: 3px solid var(--line);
+		}
+
+		.kicker {
+			display: inline-flex;
+			align-items: center;
+			gap: 8px;
+			width: fit-content;
+			margin-bottom: 10px;
+			padding: 4px 8px;
+			border: 1px solid var(--line);
+			background: var(--scope-soft);
+			font-family: var(--mono);
+			font-size: 12px;
+			font-weight: 700;
+			letter-spacing: 0;
+			text-transform: uppercase;
+		}
+
+		h1 {
+			margin: 0;
+			font-family: Didot, "Bodoni 72", Georgia, serif;
+			font-size: clamp(44px, 7vw, 108px);
+			font-weight: 700;
+			line-height: 0.9;
+			letter-spacing: 0;
+		}
+
+		.header p {
+			max-width: 820px;
+			margin: 14px 0 0;
+			color: var(--muted);
+			font-size: 18px;
+		}
+
+		.legend {
+			display: grid;
+			grid-template-columns: repeat(2, minmax(150px, 1fr));
+			gap: 8px;
+			min-width: 330px;
+			padding: 12px;
+			border: 2px solid var(--line);
+			background: var(--paper-2);
+			box-shadow: var(--shadow);
+		}
+
+		.legend-item {
+			display: flex;
+			align-items: center;
+			gap: 8px;
+			font-family: var(--mono);
+			font-size: 12px;
+			font-weight: 700;
+		}
+
+		.swatch {
+			width: 18px;
+			height: 12px;
+			border: 1px solid var(--line);
+		}
+
+		.swatch.write { background: var(--write); }
+		.swatch.read { background: var(--read); }
+		.swatch.fail { background: var(--fail); }
+		.swatch.scope { background: var(--scope); }
+
+		.toolbar {
+			position: sticky;
+			top: 0;
+			z-index: 20;
+			display: flex;
+			flex-wrap: wrap;
+			gap: 10px;
+			align-items: center;
+			justify-content: space-between;
+			margin: 20px 0;
+			padding: 12px;
+			border: 2px solid var(--line);
+			background: rgba(255, 250, 240, 0.94);
+			backdrop-filter: blur(10px);
+			box-shadow: 0 10px 24px rgba(35, 27, 15, 0.1);
+		}
+
+		.toggle-group {
+			display: flex;
+			flex-wrap: wrap;
+			gap: 8px;
+		}
+
+		.toggle {
+			position: relative;
+			display: inline-flex;
+			align-items: center;
+			gap: 8px;
+			min-height: 36px;
+			padding: 6px 11px;
+			border: 2px solid var(--line);
+			border-radius: var(--radius);
+			background: var(--neutral);
+			color: var(--ink);
+			font-family: var(--mono);
+			font-size: 12px;
+			font-weight: 800;
+			cursor: pointer;
+			user-select: none;
+		}
+
+		.toggle input {
+			position: absolute;
+			opacity: 0;
+			pointer-events: none;
+		}
+
+		.toggle .dot {
+			width: 12px;
+			height: 12px;
+			border: 2px solid var(--line);
+			background: var(--paper-2);
+		}
+
+		.toggle:has(input:checked) {
+			background: var(--ink);
+			color: var(--paper-2);
+		}
+
+		.toggle:has(input:checked) .dot {
+			background: currentColor;
+			border-color: var(--paper-2);
+		}
+
+		.toolbar-note {
+			max-width: 520px;
+			margin: 0;
+			color: var(--muted);
+			font-size: 13px;
+		}
+
+		.flow-board {
+			position: relative;
+			overflow-x: auto;
+			padding: 18px;
+			border: 3px solid var(--line);
+			background: rgba(255, 250, 240, 0.8);
+			box-shadow: var(--shadow);
+		}
+
+		.flow-stage {
+			min-width: 1180px;
+			position: relative;
+			display: grid;
+			grid-template-columns: repeat(6, minmax(165px, 1fr));
+			gap: 14px;
+			align-items: stretch;
+		}
+
+		.connectors {
+			position: absolute;
+			inset: 72px 18px 18px;
+			min-width: calc(1180px - 36px);
+			width: calc(100% - 36px);
+			height: 332px;
+			pointer-events: none;
+			z-index: 1;
+		}
+
+		.connectors path,
+		.connectors line {
+			fill: none;
+			stroke-width: 4;
+			stroke-linecap: square;
+			stroke-linejoin: round;
+			transition: opacity 160ms ease, stroke-width 160ms ease;
+		}
+
+		.connectors text {
+			font-family: var(--mono);
+			font-size: 11px;
+			font-weight: 800;
+			fill: var(--ink);
+			paint-order: stroke;
+			stroke: var(--paper-2);
+			stroke-width: 5px;
+		}
+
+		.lane {
+			position: relative;
+			z-index: 2;
+			display: grid;
+			grid-template-rows: auto 1fr;
+			gap: 10px;
+			min-height: 430px;
+		}
+
+		.lane-title {
+			min-height: 48px;
+			padding: 9px 10px;
+			border: 2px solid var(--line);
+			background: var(--ink);
+			color: var(--paper-2);
+			font-family: var(--mono);
+			font-size: 12px;
+			font-weight: 800;
+			text-transform: uppercase;
+		}
+
+		.lane-body {
+			display: grid;
+			align-content: start;
+			gap: 10px;
+			min-height: 355px;
+			padding: 10px;
+			border: 2px solid var(--line);
+			background: linear-gradient(180deg, rgba(255, 255, 255, 0.65), rgba(232, 223, 203, 0.52));
+		}
+
+		.node {
+			position: relative;
+			min-height: 74px;
+			padding: 10px 10px 11px;
+			border: 2px solid var(--line);
+			border-radius: var(--radius);
+			background: var(--paper-2);
+			box-shadow: 5px 5px 0 var(--line);
+			transition: opacity 160ms ease, transform 160ms ease, filter 160ms ease;
+		}
+
+		.node:hover {
+			transform: translate(-2px, -2px);
+			filter: saturate(1.08);
+		}
+
+		.node.write { background: var(--write-soft); }
+		.node.read { background: var(--read-soft); }
+		.node.fail { background: var(--fail-soft); }
+		.node.scope { background: var(--scope-soft); }
+		.node.neutral { background: var(--neutral); }
+
+		.node-title {
+			display: block;
+			margin-bottom: 5px;
+			font-family: var(--mono);
+			font-size: 12px;
+			font-weight: 900;
+			text-transform: uppercase;
+		}
+
+		.node p {
+			margin: 0;
+			color: var(--muted);
+			font-size: 13px;
+		}
+
+		.tooltip {
+			position: absolute;
+			left: 10px;
+			top: calc(100% + 8px);
+			z-index: 10;
+			width: min(310px, 72vw);
+			padding: 9px 10px;
+			border: 2px solid var(--line);
+			background: var(--ink);
+			color: var(--paper-2);
+			font-family: var(--mono);
+			font-size: 11px;
+			line-height: 1.35;
+			opacity: 0;
+			transform: translateY(-4px);
+			pointer-events: none;
+			transition: opacity 120ms ease, transform 120ms ease;
+		}
+
+		.node:hover .tooltip,
+		.node:focus-within .tooltip {
+			opacity: 1;
+			transform: translateY(0);
+		}
+
+		.panels {
+			display: grid;
+			grid-template-columns: minmax(0, 1.2fr) minmax(310px, 0.8fr);
+			gap: 18px;
+			margin-top: 18px;
+		}
+
+		.panel {
+			border: 3px solid var(--line);
+			background: rgba(255, 250, 240, 0.88);
+			box-shadow: var(--shadow);
+		}
+
+		.panel-header {
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			gap: 10px;
+			padding: 12px 14px;
+			border-bottom: 2px solid var(--line);
+			background: var(--ink);
+			color: var(--paper-2);
+		}
+
+		.panel-header h2 {
+			margin: 0;
+			font-family: var(--mono);
+			font-size: 14px;
+			letter-spacing: 0;
+			text-transform: uppercase;
+		}
+
+		.badge {
+			display: inline-flex;
+			align-items: center;
+			min-height: 24px;
+			padding: 2px 8px;
+			border: 1px solid currentColor;
+			font-family: var(--mono);
+			font-size: 11px;
+			font-weight: 800;
+			text-transform: uppercase;
+		}
+
+		.panel-body {
+			padding: 14px;
+		}
+
+		.path-grid {
+			display: grid;
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+			gap: 14px;
+		}
+
+		.path {
+			border: 2px solid var(--line);
+			background: var(--paper-2);
+		}
+
+		.path h3 {
+			margin: 0;
+			padding: 10px 12px;
+			border-bottom: 2px solid var(--line);
+			font-family: var(--mono);
+			font-size: 13px;
+			text-transform: uppercase;
+		}
+
+		.path.write h3 { background: var(--write-soft); }
+		.path.read h3 { background: var(--read-soft); }
+		.path.fail h3 { background: var(--fail-soft); }
+		.path.scope h3 { background: var(--scope-soft); }
+
+		.steps {
+			display: grid;
+			gap: 8px;
+			margin: 0;
+			padding: 12px;
+			list-style: none;
+			counter-reset: step;
+		}
+
+		.steps li {
+			position: relative;
+			display: grid;
+			grid-template-columns: 28px minmax(0, 1fr);
+			gap: 9px;
+			align-items: start;
+			counter-increment: step;
+			color: var(--muted);
+			font-size: 13px;
+		}
+
+		.steps li::before {
+			content: counter(step);
+			display: grid;
+			place-items: center;
+			width: 24px;
+			height: 24px;
+			border: 2px solid var(--line);
+			background: var(--ink);
+			color: var(--paper-2);
+			font-family: var(--mono);
+			font-size: 11px;
+			font-weight: 900;
+		}
+
+		.schema {
+			display: grid;
+			gap: 8px;
+			margin: 0;
+			padding: 0;
+			list-style: none;
+			font-family: var(--mono);
+			font-size: 12px;
+		}
+
+		.schema li {
+			display: grid;
+			grid-template-columns: minmax(130px, 0.95fr) minmax(110px, 0.7fr) minmax(0, 1.2fr);
+			gap: 8px;
+			align-items: start;
+			padding: 8px;
+			border: 1px solid rgba(23, 21, 18, 0.24);
+			background: var(--paper-2);
+		}
+
+		.schema strong {
+			color: var(--ink);
+		}
+
+		.schema span {
+			color: var(--muted);
+		}
+
+		.callouts {
+			display: grid;
+			grid-template-columns: repeat(4, minmax(0, 1fr));
+			gap: 12px;
+			margin-top: 18px;
+		}
+
+		.callout {
+			min-height: 110px;
+			padding: 12px;
+			border: 2px solid var(--line);
+			background: var(--paper-2);
+			box-shadow: 5px 5px 0 var(--line);
+		}
+
+		.callout h3 {
+			margin: 0 0 8px;
+			font-family: var(--mono);
+			font-size: 12px;
+			text-transform: uppercase;
+		}
+
+		.callout p {
+			margin: 0;
+			color: var(--muted);
+			font-size: 13px;
+		}
+
+		.callout.write { background: var(--write-soft); }
+		.callout.read { background: var(--read-soft); }
+		.callout.fail { background: var(--fail-soft); }
+		.callout.scope { background: var(--scope-soft); }
+
+		body:not(.show-write) [data-path="write"],
+		body:not(.show-read) [data-path="read"],
+		body:not(.show-fail) [data-path="fail"],
+		body:not(.show-scope) [data-path="scope"] {
+			opacity: 0.16;
+			filter: grayscale(0.65);
+		}
+
+		body:not(.show-write) .connectors [data-path="write"],
+		body:not(.show-read) .connectors [data-path="read"],
+		body:not(.show-fail) .connectors [data-path="fail"],
+		body:not(.show-scope) .connectors [data-path="scope"] {
+			opacity: 0.08;
+		}
+
+		@media (max-width: 980px) {
+			.header,
+			.panels,
+			.path-grid,
+			.callouts {
+				grid-template-columns: 1fr;
+			}
+
+			.legend {
+				min-width: 0;
+			}
+
+			.toolbar {
+				position: static;
+			}
+
+			.schema li {
+				grid-template-columns: 1fr;
+			}
+		}
+
+		@media (prefers-reduced-motion: reduce) {
+			* {
+				scroll-behavior: auto !important;
+				transition: none !important;
+			}
+		}
+	</style>
+</head>
+<body class="show-write show-read show-fail show-scope">
+	<div class="shell">
+		<header class="header">
+			<div>
+				<div class="kicker">implementation map</div>
+				<h1>Cross-Thread Fact Memory</h1>
+				<p>
+					A compact engineering view of the proposed n8n agents memory implementation:
+					opt-in fact extraction, scoped durable storage, and tool-mediated recall.
+				</p>
+			</div>
+			<aside class="legend" aria-label="Diagram legend">
+				<div class="legend-item"><span class="swatch write"></span>Write path</div>
+				<div class="legend-item"><span class="swatch read"></span>Read path</div>
+				<div class="legend-item"><span class="swatch fail"></span>Failure path</div>
+				<div class="legend-item"><span class="swatch scope"></span>Scope boundary</div>
+			</aside>
+		</header>
+
+		<nav class="toolbar" aria-label="Diagram controls">
+			<div class="toggle-group">
+				<label class="toggle">
+					<input type="checkbox" data-toggle="write" checked />
+					<span class="dot"></span>
+					Write path
+				</label>
+				<label class="toggle">
+					<input type="checkbox" data-toggle="read" checked />
+					<span class="dot"></span>
+					Read path
+				</label>
+				<label class="toggle">
+					<input type="checkbox" data-toggle="fail" checked />
+					<span class="dot"></span>
+					Failure paths
+				</label>
+				<label class="toggle">
+					<input type="checkbox" data-toggle="scope" checked />
+					<span class="dot"></span>
+					Scope boundaries
+				</label>
+			</div>
+			<p class="toolbar-note">
+				Toggles dim layers without changing layout, so connector geometry remains stable.
+			</p>
+		</nav>
+
+		<main>
+			<section class="flow-board" aria-labelledby="flow-title">
+				<h2 id="flow-title" class="sr-only" hidden>Cross-thread memory flow diagram</h2>
+				<svg class="connectors" viewBox="0 0 1180 332" preserveAspectRatio="none" aria-hidden="true">
+					<defs>
+						<marker id="arrow-write" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+							<path d="M 0 0 L 10 5 L 0 10 z" fill="#178f61"></path>
+						</marker>
+						<marker id="arrow-read" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+							<path d="M 0 0 L 10 5 L 0 10 z" fill="#1b74b7"></path>
+						</marker>
+						<marker id="arrow-fail" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+							<path d="M 0 0 L 10 5 L 0 10 z" fill="#c64234"></path>
+						</marker>
+						<marker id="arrow-scope" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+							<path d="M 0 0 L 10 5 L 0 10 z" fill="#8d5a09"></path>
+						</marker>
+					</defs>
+
+					<path data-path="write" d="M 80 90 C 150 90 150 90 220 90 S 360 90 430 90 S 570 90 640 90 S 780 90 850 90 S 990 90 1060 90" stroke="#178f61" marker-end="url(#arrow-write)"></path>
+					<text data-path="write" x="470" y="70">post-turn write</text>
+
+					<path data-path="read" d="M 1060 234 C 990 234 990 234 850 234 S 640 234 570 234 S 360 234 220 234" stroke="#1b74b7" marker-end="url(#arrow-read)"></path>
+					<text data-path="read" x="610" y="260">tool-mediated recall</text>
+
+					<path data-path="scope" d="M 76 296 L 1080 296" stroke="#8d5a09" stroke-dasharray="10 8" marker-end="url(#arrow-scope)"></path>
+					<text data-path="scope" x="430" y="318">scope: agentId + resourceId, where resourceId = user id</text>
+
+					<path data-path="fail" d="M 640 124 C 696 164 762 164 850 142" stroke="#c64234" stroke-dasharray="7 7" marker-end="url(#arrow-fail)"></path>
+					<text data-path="fail" x="660" y="162">warn, continue</text>
+				</svg>
+
+				<div class="flow-stage">
+					<section class="lane">
+						<div class="lane-title">Agent JSON Config</div>
+						<div class="lane-body">
+							<article class="node scope" data-path="scope" tabindex="0">
+								<strong class="node-title">explicit opt-in</strong>
+								<p><code>memory.crossThreadFacts</code> enables extraction and recall.</p>
+								<div class="tooltip">Default is off. Existing <code>memory.enabled</code> does not silently enable cross-thread facts. n8n JSON config stores an embedding model id and credential reference.</div>
+							</article>
+							<article class="node neutral" tabindex="0">
+								<strong class="node-title">semanticRecall excluded</strong>
+								<p>Stale POC surface remains untouched and unused here.</p>
+								<div class="tooltip"><code>semanticRecall</code> is not a dependency, fallback, or configuration shortcut for this feature.</div>
+							</article>
+							<article class="node scope" data-path="scope" tabindex="0">
+								<strong class="node-title">user identity</strong>
+								<p><code>resourceId</code> maps to the user id.</p>
+								<div class="tooltip">The SDK contract uses <code>resourceId</code> as the user scope. No extra <code>userId</code> field is introduced.</div>
+							</article>
+						</div>
+					</section>
+
+					<section class="lane">
+						<div class="lane-title">SDK Memory Builder</div>
+						<div class="lane-body">
+							<article class="node scope" data-path="scope" tabindex="0">
+								<strong class="node-title">new memory surface</strong>
+								<p><code>Memory.crossThreadFacts(...)</code> produces SDK config.</p>
+								<div class="tooltip">Separate from working memory and separate from semantic recall. SDK consumers provide the embedding model and may override prompt templates.</div>
+							</article>
+							<article class="node scope" data-path="scope" tabindex="0">
+								<strong class="node-title">backend capability</strong>
+								<p>Configured memory must implement fact storage and search.</p>
+								<div class="tooltip">The feature extends the configured backend. It does not create a second database.</div>
+							</article>
+						</div>
+					</section>
+
+					<section class="lane">
+						<div class="lane-title">Agent Runtime</div>
+						<div class="lane-body">
+							<article class="node write" data-path="write" tabindex="0">
+								<strong class="node-title">persist turn</strong>
+								<p>User and assistant messages are saved before extraction runs.</p>
+								<div class="tooltip">Only successful terminal turns enter the fact extraction path.</div>
+							</article>
+							<article class="node scope" data-path="scope" tabindex="0">
+								<strong class="node-title">require agentId</strong>
+								<p>Runtime passes <code>agentId + resourceId</code> to memory calls.</p>
+								<div class="tooltip">n8n injects the agent entity id. <code>resourceId</code> remains the user id.</div>
+							</article>
+							<article class="node read" data-path="read" tabindex="0">
+								<strong class="node-title">register recall_memory</strong>
+								<p>Built-in tool appears only when feature is enabled.</p>
+								<div class="tooltip">The tool is not auto prompt injection. The model must call it explicitly.</div>
+							</article>
+						</div>
+					</section>
+
+					<section class="lane">
+						<div class="lane-title">Fact Extractor</div>
+						<div class="lane-body">
+							<article class="node write" data-path="write" tabindex="0">
+								<strong class="node-title">atomic facts</strong>
+								<p>Extractor reads latest user/assistant pair and emits short facts.</p>
+								<div class="tooltip">Fact text is capped by config, defaulting to 240 characters in the SDK foundation.</div>
+							</article>
+							<article class="node write" data-path="write" tabindex="0">
+								<strong class="node-title">hash and embed</strong>
+								<p>Trimmed content is hashed, deduped, then embedded.</p>
+								<div class="tooltip">Exact hash dedupe only. Embedding calls use the SDK consumer supplied Vercel AI embedding model.</div>
+							</article>
+							<article class="node fail" data-path="fail" tabindex="0">
+								<strong class="node-title">non-blocking failures</strong>
+								<p>Extractor, JSON, and embedding errors emit warnings and continue.</p>
+								<div class="tooltip">The visible agent response is not failed by background fact memory errors.</div>
+							</article>
+						</div>
+					</section>
+
+					<section class="lane">
+						<div class="lane-title">N8nMemory / App DB</div>
+						<div class="lane-body">
+							<article class="node write" data-path="write" tabindex="0">
+								<strong class="node-title">agents_memory_facts</strong>
+								<p>Durable facts live in the existing app database.</p>
+								<div class="tooltip">No sidecar SQLite file. No SDK-local persistent backend is reintroduced.</div>
+							</article>
+							<article class="node scope" data-path="scope" tabindex="0">
+								<strong class="node-title">unique scope hash</strong>
+								<p><code>agentId, resourceId, contentHash</code> prevents duplicates.</p>
+								<div class="tooltip">The same user can have separate fact sets for separate agents.</div>
+							</article>
+							<article class="node read" data-path="read" tabindex="0">
+								<strong class="node-title">portable retrieval</strong>
+								<p>Lexical and vector scores are computed in application code.</p>
+								<div class="tooltip">No <code>vec0</code>, FTS5, pgvector, or DB-specific full-text dependency in v1.</div>
+							</article>
+						</div>
+					</section>
+
+					<section class="lane">
+						<div class="lane-title">recall_memory Tool</div>
+						<div class="lane-body">
+							<article class="node read" data-path="read" tabindex="0">
+								<strong class="node-title">query</strong>
+								<p>The model calls <code>recall_memory(query)</code> explicitly.</p>
+								<div class="tooltip">No automatic injection into the system prompt or message list.</div>
+							</article>
+							<article class="node read" data-path="read" tabindex="0">
+								<strong class="node-title">ranked facts</strong>
+								<p>RRF combines lexical and vector candidates, then recency weights.</p>
+								<div class="tooltip">Either lexical or vector signals can introduce a candidate.</div>
+							</article>
+							<article class="node read" data-path="read" tabindex="0">
+								<strong class="node-title">model output</strong>
+								<p>Model sees fact content and creation time.</p>
+								<div class="tooltip">Raw debug output may keep score breakdowns for tests and tuning.</div>
+							</article>
+						</div>
+					</section>
+				</div>
+			</section>
+
+			<section class="panels" aria-label="Implementation details">
+				<div class="panel">
+					<header class="panel-header">
+						<h2>Paths</h2>
+						<span class="badge">runtime contract</span>
+					</header>
+					<div class="panel-body">
+						<div class="path-grid">
+							<article class="path write" data-path="write">
+								<h3>Write Path</h3>
+								<ol class="steps">
+									<li><span>Turn finishes and messages persist through configured memory.</span></li>
+									<li><span>Runtime passes <code>agentId + resourceId</code> into fact extraction.</span></li>
+									<li><span>Extractor returns zero or more short atomic facts.</span></li>
+									<li><span>Content hash skips exact duplicates inside the user and agent scope.</span></li>
+									<li><span>New facts are embedded through the configured model and stored in <code>agents_memory_facts</code>.</span></li>
+								</ol>
+							</article>
+
+							<article class="path read" data-path="read">
+								<h3>Read Path</h3>
+								<ol class="steps">
+									<li><span>Model decides to call <code>recall_memory(query)</code>.</span></li>
+									<li><span>Tool searches only the active <code>agentId + resourceId</code> scope.</span></li>
+									<li><span>Lexical and vector candidate sets are ranked independently.</span></li>
+									<li><span>RRF fuses candidates and recency weighting adjusts final order.</span></li>
+									<li><span>Top facts return to the model without injecting hidden prompt context.</span></li>
+								</ol>
+							</article>
+
+							<article class="path fail" data-path="fail">
+								<h3>Failure Path</h3>
+								<ol class="steps">
+									<li><span>Extraction call fails, emits malformed JSON, or embedding fails.</span></li>
+									<li><span>Runtime emits a background memory error event with context.</span></li>
+									<li><span>No retry, no queue, no user-facing run failure in v1.</span></li>
+								</ol>
+							</article>
+
+							<article class="path scope" data-path="scope">
+								<h3>Scope Boundary</h3>
+								<ol class="steps">
+									<li><span><code>agentId</code> separates facts across agents.</span></li>
+									<li><span><code>resourceId</code> is the user id.</span></li>
+									<li><span>Storage and recall both require the same pair.</span></li>
+								</ol>
+							</article>
+						</div>
+					</div>
+				</div>
+
+				<aside class="panel" aria-labelledby="schema-title">
+					<header class="panel-header">
+						<h2 id="schema-title">agents_memory_facts</h2>
+						<span class="badge">compact schema</span>
+					</header>
+					<div class="panel-body">
+						<ul class="schema">
+							<li><strong>id</strong><code>varchar(36)</code><span>primary key</span></li>
+							<li><strong>agentId</strong><code>varchar(36)</code><span>agent scope</span></li>
+							<li><strong>resourceId</strong><code>varchar(255)</code><span>user id scope</span></li>
+							<li><strong>content</strong><code>text</code><span>atomic fact</span></li>
+							<li><strong>contentHash</strong><code>varchar(64)</code><span>SHA-256 dedupe key</span></li>
+							<li><strong>embedding</strong><code>json</code><span>portable numeric vector</span></li>
+							<li><strong>embeddingModel</strong><code>varchar(128)</code><span>configured embedder id</span></li>
+							<li><strong>sourceThreadId</strong><code>varchar(36)</code><span>optional provenance</span></li>
+							<li><strong>sourceMessageId</strong><code>varchar(36)</code><span>optional provenance</span></li>
+							<li><strong>metadata</strong><code>json</code><span>reserved debug/provenance data</span></li>
+							<li><strong>createdAt</strong><code>timestamp</code><span>recency ranking input</span></li>
+						</ul>
+					</div>
+				</aside>
+			</section>
+
+			<section class="callouts" aria-label="Design invariants">
+				<article class="callout scope" data-path="scope">
+					<h3>Identity</h3>
+					<p><code>resourceId</code> is the user id. The fact scope is exactly <code>agentId + resourceId</code>.</p>
+				</article>
+				<article class="callout write" data-path="write">
+					<h3>No Sidecar DB</h3>
+					<p>The feature extends the configured <code>N8nMemory</code> app-DB backend.</p>
+				</article>
+				<article class="callout read" data-path="read">
+					<h3>No Auto Injection</h3>
+					<p>Facts are recalled through the tool only. They are not pushed into prompts by default.</p>
+				</article>
+				<article class="callout fail" data-path="fail">
+					<h3>Non-Blocking</h3>
+					<p>Background memory errors warn and continue; the user-facing agent run remains intact.</p>
+				</article>
+			</section>
+		</main>
+	</div>
+
+	<script>
+		const toggles = document.querySelectorAll('[data-toggle]');
+		for (const toggle of toggles) {
+			toggle.addEventListener('change', () => {
+				const key = toggle.dataset.toggle;
+				document.body.classList.toggle(`show-${key}`, toggle.checked);
+			});
+		}
+	</script>
+</body>
+</html>
