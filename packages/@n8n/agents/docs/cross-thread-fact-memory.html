@@ -605,7 +605,7 @@
 				</label>
 				</div>
 				<p class="toolbar-note">
-					Post-turn extraction is background by default; <code>sync: true</code> is for deterministic smoke tests and evals.
+					Pre-turn retrieval injects scoped facts before the LLM call; post-turn extraction stays background by default.
 				</p>
 			</nav>
 
@@ -632,7 +632,7 @@
 					<text data-path="write" x="450" y="70">post-turn background write</text>
 
 					<path data-path="read" d="M 1060 234 C 990 234 990 234 850 234 S 640 234 570 234 S 360 234 220 234" stroke="#1b74b7" marker-end="url(#arrow-read)"></path>
-					<text data-path="read" x="610" y="260">tool-mediated recall</text>
+					<text data-path="read" x="610" y="260">hybrid read: inject first, tool on demand</text>
 
 					<path data-path="scope" d="M 76 296 L 1080 296" stroke="#8d5a09" stroke-dasharray="10 8" marker-end="url(#arrow-scope)"></path>
 					<text data-path="scope" x="430" y="318">scope: agentId + resourceId, where resourceId = user id</text>
@@ -698,9 +698,14 @@
 								<div class="tooltip">n8n injects the agent entity id. <code>resourceId</code> remains the user id.</div>
 							</article>
 							<article class="node read" data-path="read" tabindex="0">
+								<strong class="node-title">auto-inject facts</strong>
+								<p>Runtime searches with the current user message before the LLM call.</p>
+								<div class="tooltip">Runs only when cross-thread facts are enabled, <code>autoInject !== false</code>, a fact store exists, and <code>agentId + resourceId</code> are present.</div>
+							</article>
+							<article class="node read" data-path="read" tabindex="0">
 								<strong class="node-title">register recall_memory</strong>
 								<p>Built-in tool appears only when feature is enabled.</p>
-								<div class="tooltip">The tool is not auto prompt injection. The model must call it explicitly.</div>
+								<div class="tooltip">Relevant facts may already be in <code>&lt;memory&gt;</code>. The tool remains the deliberate escape hatch for additional or situational lookup.</div>
 							</article>
 						</div>
 					</section>
@@ -753,7 +758,7 @@
 							<article class="node read" data-path="read" tabindex="0">
 								<strong class="node-title">query</strong>
 								<p>The model calls <code>recall_memory(query)</code> explicitly.</p>
-								<div class="tooltip">No automatic injection into the system prompt or message list.</div>
+								<div class="tooltip">The tool supplements injected memory when the current turn needs more specific prior facts.</div>
 							</article>
 							<article class="node read" data-path="read" tabindex="0">
 								<strong class="node-title">ranked facts</strong>
@@ -794,11 +799,12 @@
 							<article class="path read" data-path="read">
 								<h3>Read Path</h3>
 								<ol class="steps">
-									<li><span>Model decides to call <code>recall_memory(query)</code>.</span></li>
-									<li><span>Tool searches only the active <code>agentId + resourceId</code> scope.</span></li>
+									<li><span>If enabled, runtime embeds the current user message before the LLM call.</span></li>
+									<li><span>Search runs only inside the active <code>agentId + resourceId</code> scope.</span></li>
 									<li><span>Lexical and vector candidate sets are ranked independently.</span></li>
 									<li><span>RRF fuses candidates and recency weighting adjusts final order.</span></li>
-									<li><span>Top facts return to the model without injecting hidden prompt context.</span></li>
+									<li><span>Top facts are injected into a visible <code>&lt;memory&gt;</code> section, most recent first with relative ages.</span></li>
+									<li><span><code>recall_memory(query)</code> remains available when injected facts are insufficient.</span></li>
 								</ol>
 							</article>
 
@@ -806,8 +812,9 @@
 								<h3>Failure Path</h3>
 								<ol class="steps">
 									<li><span>Extraction call fails, emits malformed JSON, or embedding fails.</span></li>
-									<li><span>Runtime emits a background memory error event with context.</span></li>
-									<li><span>No retry, no queue, no blocked run completion, no user-facing run failure in v1.</span></li>
+									<li><span>Pre-turn retrieval can also fail before the LLM call.</span></li>
+									<li><span>Runtime emits a cross-thread memory error event with context.</span></li>
+									<li><span>No retry, no queue, and no user-facing run failure in v1.</span></li>
 								</ol>
 							</article>
 
@@ -856,8 +863,8 @@
 					<p>The feature extends the configured <code>N8nMemory</code> app-DB backend.</p>
 				</article>
 				<article class="callout read" data-path="read">
-					<h3>No Auto Injection</h3>
-					<p>Facts are recalled through the tool only. They are not pushed into prompts by default.</p>
+					<h3>Hybrid Recall</h3>
+					<p>Relevant facts are auto-injected by default, and <code>recall_memory</code> remains available for deliberate lookup.</p>
 				</article>
 					<article class="callout fail" data-path="fail">
 						<h3>Non-Blocking</h3>
