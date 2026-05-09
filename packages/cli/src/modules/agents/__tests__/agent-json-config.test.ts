@@ -179,3 +179,70 @@ describe('AgentJsonConfigSchema — memory.observationalMemory', () => {
 		expect(parsed.success).toBe(true);
 	});
 });
+
+describe('AgentJsonConfigSchema — memory.crossThreadFacts', () => {
+	const memoryBase = { enabled: true, storage: 'n8n' as const };
+
+	it('accepts cross-thread facts with an embedding model and credential reference', () => {
+		const parsed = AgentJsonConfigSchema.safeParse({
+			...baseConfig,
+			memory: {
+				...memoryBase,
+				crossThreadFacts: {
+					enabled: true,
+					embedder: 'openai/text-embedding-3-small',
+					credential: 'openai-credential-id',
+					topK: 8,
+					prompts: {
+						extraction: 'Extract only durable user facts.',
+						recallToolInstruction: 'Use recall_memory when facts may help.',
+					},
+				},
+			},
+		});
+
+		expect(parsed.success).toBe(true);
+	});
+
+	it('rejects enabled cross-thread facts without a credential reference', () => {
+		const parsed = AgentJsonConfigSchema.safeParse({
+			...baseConfig,
+			memory: {
+				...memoryBase,
+				crossThreadFacts: {
+					enabled: true,
+					embedder: 'openai/text-embedding-3-small',
+				},
+			},
+		});
+
+		expect(parsed.success).toBe(false);
+	});
+
+	it('rejects enabled cross-thread facts without an embedding model', () => {
+		const parsed = AgentJsonConfigSchema.safeParse({
+			...baseConfig,
+			memory: {
+				...memoryBase,
+				crossThreadFacts: {
+					enabled: true,
+					credential: 'openai-credential-id',
+				},
+			},
+		});
+
+		expect(parsed.success).toBe(false);
+	});
+
+	it('allows disabled cross-thread facts without credential details', () => {
+		const parsed = AgentJsonConfigSchema.safeParse({
+			...baseConfig,
+			memory: {
+				...memoryBase,
+				crossThreadFacts: { enabled: false },
+			},
+		});
+
+		expect(parsed.success).toBe(true);
+	});
+});

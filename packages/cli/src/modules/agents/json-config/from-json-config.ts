@@ -7,7 +7,7 @@ import type {
 	ToolDescriptor,
 	JSONObject,
 } from '@n8n/agents';
-import { Agent, Memory, Tool, wrapToolForApproval } from '@n8n/agents';
+import { Agent, createEmbeddingModel, Memory, Tool, wrapToolForApproval } from '@n8n/agents';
 import type { AgentSkill } from '@n8n/api-types';
 import { z } from 'zod';
 
@@ -117,7 +117,12 @@ export async function buildFromJson(
 
 	// Memory
 	if (config.memory?.enabled) {
-		await applyMemoryFromConfig(agent, config.memory, options.memoryFactory);
+		await applyMemoryFromConfig(
+			agent,
+			config.memory,
+			options.memoryFactory,
+			options.credentialProvider,
+		);
 	}
 
 	// Config options
@@ -290,6 +295,7 @@ async function applyMemoryFromConfig(
 	agent: AgentBuilder,
 	memoryConfig: AgentJsonMemoryConfig,
 	memoryFactory: MemoryFactory,
+	credentialProvider: CredentialProvider,
 ) {
 	const memory = new Memory();
 
@@ -306,6 +312,14 @@ async function applyMemoryFromConfig(
 
 	if (memoryConfig.semanticRecall) {
 		memory.semanticRecall(memoryConfig.semanticRecall);
+	}
+
+	if (memoryConfig.crossThreadFacts?.enabled === true) {
+		const crossThreadFactsConfig = await resolveCrossThreadFactsConfig(
+			memoryConfig.crossThreadFacts,
+			credentialProvider,
+		);
+		memory.crossThreadFacts(crossThreadFactsConfig);
 	}
 
 	if (memoryConfig.observationalMemory?.enabled !== false) {
@@ -344,6 +358,26 @@ async function applyMemoryFromConfig(
 	agent.memory(memory);
 }
 
+async function resolveCrossThreadFactsConfig(
+	config: Extract<NonNullable<AgentJsonMemoryConfig['crossThreadFacts']>, { enabled: true }>,
+	credentialProvider: CredentialProvider,
+) {
+	const providerPrefix = getProviderPrefix(config.embedder);
+	const raw = await credentialProvider.resolve(config.credential);
+	const mapped = mapCredentialForProvider(providerPrefix, raw);
+
+	return {
+		enabled: true,
+		...(config.topK !== undefined && { topK: config.topK }),
+		...(config.halfLifeDays !== undefined && { halfLifeDays: config.halfLifeDays }),
+		...(config.maxFactsPerTurn !== undefined && { maxFactsPerTurn: config.maxFactsPerTurn }),
+		...(config.maxFactLength !== undefined && { maxFactLength: config.maxFactLength }),
+		embedder: createEmbeddingModel(config.embedder, mapped),
+		embeddingModel: config.embedder,
+		...(config.prompts !== undefined && { prompts: config.prompts }),
+	};
+}
+
 async function resolveModelConfig(
 	config: AgentJsonConfig,
 	credentialProvider: CredentialProvider,
@@ -355,4 +389,9 @@ async function resolveModelConfig(
 	const raw = await credentialProvider.resolve(config.credential);
 	const mapped = mapCredentialForProvider(providerPrefix, raw);
 	return { id: config.model, ...mapped } as ModelConfig;
+}
+
+function getProviderPrefix(modelId: string): string {
+	const slashIdx = modelId.indexOf('/');
+	return slashIdx !== -1 ? modelId.slice(0, slashIdx) : '';
 }

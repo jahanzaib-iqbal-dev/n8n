@@ -34,11 +34,36 @@ const ObservationalMemoryConfigSchema = z.object({
 	compactorPrompt: z.string().optional(),
 });
 
+const CrossThreadFactPromptsSchema = z.object({
+	extraction: z.string().optional(),
+	recallToolInstruction: z.string().optional(),
+});
+
+const CrossThreadFactsConfigSchema = z.discriminatedUnion('enabled', [
+	z.object({
+		enabled: z.literal(true),
+		topK: z.number().int().min(1).max(100).optional(),
+		halfLifeDays: z.number().int().min(1).optional(),
+		maxFactsPerTurn: z.number().int().min(1).max(20).optional(),
+		maxFactLength: z.number().int().min(40).max(2000).optional(),
+		embedder: z
+			.string()
+			.min(1)
+			.regex(/^[a-z0-9-]+\/(?:[a-z0-9._-]+\/)*[a-z0-9._-]+$/i),
+		credential: z.string().min(1),
+		prompts: CrossThreadFactPromptsSchema.optional(),
+	}),
+	z.object({
+		enabled: z.literal(false),
+	}),
+]);
+
 const MemoryConfigSchema = z.object({
 	enabled: z.boolean(),
 	storage: z.enum(['n8n']),
 	lastMessages: z.number().int().min(1).max(200).optional(),
 	semanticRecall: SemanticRecallSchema.optional(),
+	crossThreadFacts: CrossThreadFactsConfigSchema.optional(),
 	observationalMemory: ObservationalMemoryConfigSchema.optional(),
 });
 

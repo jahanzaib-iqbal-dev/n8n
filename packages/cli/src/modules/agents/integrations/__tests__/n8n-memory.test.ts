@@ -1,13 +1,54 @@
-import { OBSERVATION_SCHEMA_VERSION, type NewObservation } from '@n8n/agents';
+import {
+	OBSERVATION_SCHEMA_VERSION,
+	type NewCrossThreadFact,
+	type NewObservation,
+} from '@n8n/agents';
 import { Equal, In, LessThan, LessThanOrEqual, MoreThan } from '@n8n/typeorm';
 import { mock } from 'jest-mock-extended';
 
+jest.mock('@n8n/agents', () => {
+	const actual = jest.requireActual<Record<string, unknown>>('@n8n/agents');
+	return {
+		...actual,
+		rankCrossThreadFacts: jest.fn(
+			(
+				facts: Array<{ id: string; embedding?: number[] }>,
+				_query: string,
+				opts?: { topK?: number; queryEmbedding?: number[] },
+			) =>
+				facts
+					.map((fact) => ({
+						...fact,
+						lexicalScore: 0,
+						vectorScore: opts?.queryEmbedding
+							? (fact.embedding ?? []).reduce(
+									(sum, value, index) => sum + value * (opts.queryEmbedding?.[index] ?? 0),
+									0,
+								)
+							: 0,
+						rrfScore: 0,
+						recencyFactor: 1,
+						finalScore: opts?.queryEmbedding
+							? (fact.embedding ?? []).reduce(
+									(sum, value, index) => sum + value * (opts.queryEmbedding?.[index] ?? 0),
+									0,
+								)
+							: 0,
+					}))
+					.sort((a, b) => b.finalScore - a.finalScore)
+					.slice(0, opts?.topK ?? facts.length),
+		),
+	};
+});
+
+import type { AgentMemoryFactEntity } from '../../entities/agent-memory-fact.entity';
 import type { AgentMessageEntity } from '../../entities/agent-message.entity';
 import type { AgentObservationCursorEntity } from '../../entities/agent-observation-cursor.entity';
 import type { AgentObservationLockEntity } from '../../entities/agent-observation-lock.entity';
 import type { AgentObservationEntity } from '../../entities/agent-observation.entity';
 import type { AgentThreadEntity } from '../../entities/agent-thread.entity';
 import type { AgentMessageRepository } from '../../repositories/agent-message.repository';
+import type { AgentMemoryFactRepository } from '../../repositories/agent-memory-fact.repository';
 import type { AgentObservationCursorRepository } from '../../repositories/agent-observation-cursor.repository';
 import type { AgentObservationLockRepository } from '../../repositories/agent-observation-lock.repository';
 import type { AgentObservationRepository } from '../../repositories/agent-observation.repository';
@@ -19,6 +60,7 @@ describe('N8nMemory', () => {
 	let memory: N8nMemory;
 	let messageRepository: jest.Mocked<AgentMessageRepository>;
 	let threadRepository: jest.Mocked<AgentThreadRepository>;
+	let memoryFactRepository: jest.Mocked<AgentMemoryFactRepository>;
 	let resourceRepository: jest.Mocked<AgentResourceRepository>;
 	let observationRepository: jest.Mocked<AgentObservationRepository>;
 	let observationCursorRepository: jest.Mocked<AgentObservationCursorRepository>;
@@ -29,6 +71,7 @@ describe('N8nMemory', () => {
 
 		messageRepository = mock<AgentMessageRepository>();
 		threadRepository = mock<AgentThreadRepository>();
+		memoryFactRepository = mock<AgentMemoryFactRepository>();
 		resourceRepository = mock<AgentResourceRepository>();
 		observationRepository = mock<AgentObservationRepository>();
 		observationCursorRepository = mock<AgentObservationCursorRepository>();
@@ -37,6 +80,7 @@ describe('N8nMemory', () => {
 		memory = new N8nMemory(
 			threadRepository,
 			messageRepository,
+			memoryFactRepository,
 			resourceRepository,
 			observationRepository,
 			observationCursorRepository,
@@ -308,6 +352,131 @@ describe('N8nMemory', () => {
 				threadId: 'thread-1',
 				resourceId: '',
 			});
+		});
+	});
+
+	describe('cross-thread facts', () => {
+		const createdAt = new Date('2026-05-09T10:00:00.000Z');
+
+		function makeFact(overrides: Partial<NewCrossThreadFact> = {}): NewCrossThreadFact {
+			return {
+				agentId: 'agent-1',
+				resourceId: 'user-1',
+				content: 'The user prefers terse answers.',
+				contentHash: 'hash-1',
+				createdAt,
+				sourceThreadId: 'thread-1',
+				sourceMessageId: 'message-1',
+				embedding: [0.9, 0.1],
+				embeddingModel: 'openai/text-embedding-3-small',
+				metadata: { kind: 'preference' },
+				...overrides,
+			};
+		}
+
+		function makeFactEntity(overrides: Partial<AgentMemoryFactEntity> = {}): AgentMemoryFactEntity {
+			return {
+				id: 'fact-1',
+				agentId: 'agent-1',
+				resourceId: 'user-1',
+				content: 'The user prefers terse answers.',
+				contentHash: 'hash-1',
+				sourceThreadId: 'thread-1',
+				sourceMessageId: 'message-1',
+				embeddingModel: 'openai/text-embedding-3-small',
+				embedding: [0.9, 0.1],
+				metadata: { kind: 'preference' },
+				createdAt,
+				updatedAt: new Date('2026-05-09T10:05:00.000Z'),
+				...overrides,
+			} as AgentMemoryFactEntity;
+		}
+
+		beforeEach(() => {
+			memoryFactRepository.create.mockImplementation((input) => {
+				const entity = makeFactEntity({ id: 'new-fact', updatedAt: createdAt });
+				Object.assign(entity, input);
+				return entity;
+			});
+			memoryFactRepository.save.mockImplementation(
+				async (entity) => entity as AgentMemoryFactEntity,
+			);
+		});
+
+		it('dedupes facts by agentId, resourceId, and exact content hash', async () => {
+			const existing = makeFactEntity({ id: 'existing-fact' });
+			memoryFactRepository.findOneBy.mockResolvedValue(existing);
+
+			const result = await memory.saveCrossThreadFacts([makeFact()]);
+
+			expect(memoryFactRepository.findOneBy).toHaveBeenCalledWith({
+				agentId: 'agent-1',
+				resourceId: 'user-1',
+				contentHash: 'hash-1',
+			});
+			expect(memoryFactRepository.save).not.toHaveBeenCalled();
+			expect(result).toEqual([
+				expect.objectContaining({
+					id: 'existing-fact',
+					content: 'The user prefers terse answers.',
+				}),
+			]);
+		});
+
+		it('persists new facts with nullable source and embedding fields normalized', async () => {
+			memoryFactRepository.findOneBy.mockResolvedValue(null);
+
+			await memory.saveCrossThreadFacts([
+				makeFact({
+					sourceThreadId: undefined,
+					sourceMessageId: undefined,
+					embedding: undefined,
+					embeddingModel: undefined,
+					metadata: undefined,
+				}),
+			]);
+
+			expect(memoryFactRepository.create).toHaveBeenCalledWith(
+				expect.objectContaining({
+					agentId: 'agent-1',
+					resourceId: 'user-1',
+					contentHash: 'hash-1',
+					sourceThreadId: null,
+					sourceMessageId: null,
+					embeddingModel: null,
+					embedding: null,
+					metadata: null,
+					createdAt,
+				}),
+			);
+			expect(memoryFactRepository.save).toHaveBeenCalled();
+		});
+
+		it('searches only within the agentId and resourceId scope and ranks candidates', async () => {
+			memoryFactRepository.find.mockResolvedValue([
+				makeFactEntity({
+					id: 'weaker',
+					content: 'The user likes long implementation plans.',
+					embedding: [0.1, 0.9],
+				}),
+				makeFactEntity({
+					id: 'target',
+					content: 'The user prefers terse answers.',
+					contentHash: 'hash-2',
+					embedding: [0.9, 0.1],
+				}),
+			]);
+
+			const result = await memory.searchCrossThreadFacts(
+				{ agentId: 'agent-1', resourceId: 'user-1' },
+				'How should I answer this user?',
+				{ queryEmbedding: [0.9, 0.1], topK: 1 },
+			);
+
+			expect(memoryFactRepository.find).toHaveBeenCalledWith({
+				where: { agentId: 'agent-1', resourceId: 'user-1' },
+			});
+			expect(result.map((fact) => fact.id)).toEqual(['target']);
 		});
 	});
 

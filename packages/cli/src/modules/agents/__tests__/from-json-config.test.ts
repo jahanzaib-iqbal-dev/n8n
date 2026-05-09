@@ -1,6 +1,38 @@
 import type { AgentSnapshot, ToolDescriptor } from '@n8n/agents';
 import type { JSONSchema7 } from 'json-schema';
 
+jest.mock('@n8n/agents', () => {
+	const actual = jest.requireActual<Record<string, unknown>>('@n8n/agents');
+	const Memory = actual.Memory as {
+		prototype: {
+			build(): Record<string, unknown>;
+			crossThreadFacts?(config: unknown): unknown;
+			__crossThreadFactsConfig?: unknown;
+		};
+	};
+	if (!Memory.prototype.crossThreadFacts) {
+		const originalBuild = Memory.prototype.build;
+		Memory.prototype.crossThreadFacts = function (config: unknown) {
+			this.__crossThreadFactsConfig = config;
+			return this;
+		};
+		Memory.prototype.build = function () {
+			return {
+				...originalBuild.call(this),
+				crossThreadFacts: this.__crossThreadFactsConfig,
+			};
+		};
+	}
+	return {
+		...actual,
+		createEmbeddingModel: jest.fn((id: string, options: Record<string, unknown>) => ({
+			id,
+			options,
+			doEmbed: jest.fn(),
+		})),
+	};
+});
+
 import type { AgentJsonConfig } from '../json-config/agent-json-config';
 import { AgentJsonConfigSchema } from '../json-config/agent-json-config';
 import { buildFromJson } from '../json-config/from-json-config';
@@ -63,6 +95,16 @@ describe('buildFromJson()', () => {
 						observerPrompt?: string;
 						compactorPrompt?: string;
 					};
+					crossThreadFacts?: {
+						enabled?: boolean;
+						topK?: number;
+						embeddingModel?: string;
+						embedder?: unknown;
+						prompts?: {
+							extraction?: string;
+							recallToolInstruction?: string;
+						};
+					};
 				};
 			}
 		).memoryConfig;
@@ -78,6 +120,8 @@ describe('buildFromJson()', () => {
 		deleteMessages: jest.fn(),
 		getWorkingMemory: jest.fn().mockResolvedValue(null),
 		saveWorkingMemory: jest.fn(),
+		saveCrossThreadFacts: jest.fn(),
+		searchCrossThreadFacts: jest.fn(),
 		appendObservations: jest.fn(),
 		getObservations: jest.fn(),
 		getMessagesForScope: jest.fn(),
@@ -541,6 +585,74 @@ describe('buildFromJson()', () => {
 			observerPrompt: 'Observe.',
 			compactorPrompt: 'Compact.',
 		});
+	});
+
+	it('resolves cross-thread fact embeddings through n8n credentials', async () => {
+		const mockMemory = makeMockMemoryBackend();
+		const config = makeConfig({
+			memory: {
+				enabled: true,
+				storage: 'n8n',
+				crossThreadFacts: {
+					enabled: true,
+					embedder: 'openai/text-embedding-3-small',
+					credential: 'openai-embedding-credential',
+					topK: 7,
+					prompts: {
+						extraction: 'Extract durable facts.',
+						recallToolInstruction: 'Use recall_memory before answering memory questions.',
+					},
+				},
+			},
+		});
+		const credentialProvider = makeMockCredentialProvider();
+
+		const agent = await buildFromJson(
+			config,
+			{},
+			{
+				toolExecutor: makeMockToolExecutor(),
+				credentialProvider,
+				memoryFactory: jest.fn().mockReturnValue(mockMemory),
+			},
+		);
+
+		expect(credentialProvider.resolve).toHaveBeenCalledWith('my-anthropic-key');
+		expect(credentialProvider.resolve).toHaveBeenCalledWith('openai-embedding-credential');
+		expect(getMemoryConfig(agent)?.crossThreadFacts).toMatchObject({
+			enabled: true,
+			topK: 7,
+			embeddingModel: 'openai/text-embedding-3-small',
+			prompts: {
+				extraction: 'Extract durable facts.',
+				recallToolInstruction: 'Use recall_memory before answering memory questions.',
+			},
+		});
+		expect(getMemoryConfig(agent)?.crossThreadFacts?.embedder).toBeDefined();
+	});
+
+	it('does not resolve embedding credentials when cross-thread facts are disabled', async () => {
+		const config = makeConfig({
+			memory: {
+				enabled: true,
+				storage: 'n8n',
+				crossThreadFacts: { enabled: false },
+			},
+		});
+		const credentialProvider = makeMockCredentialProvider();
+
+		await buildFromJson(
+			config,
+			{},
+			{
+				toolExecutor: makeMockToolExecutor(),
+				credentialProvider,
+				memoryFactory: jest.fn().mockReturnValue(makeMockMemoryBackend()),
+			},
+		);
+
+		expect(credentialProvider.resolve).toHaveBeenCalledTimes(1);
+		expect(credentialProvider.resolve).toHaveBeenCalledWith('my-anthropic-key');
 	});
 
 	it('applies observational memory defaults when memory is enabled', async () => {
