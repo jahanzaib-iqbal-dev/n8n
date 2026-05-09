@@ -62,6 +62,11 @@ const DEFAULT_WORKING_MEMORY_INSTRUCTION = [
 	'Do not try to edit, summarize, refresh, or maintain working memory directly.',
 ].join(' ');
 
+const N8N_CROSS_THREAD_MEMORY_DISABLED_INSTRUCTION = [
+	'cross-thread memory is not enabled for this agent.',
+	'If the user asks you to remember, recall, or persist facts across sessions, explain that cross-thread memory is not enabled yet and can be enabled in the Advanced panel.',
+].join(' ');
+
 export interface BuildFromJsonOptions {
 	/** Executes custom tool handlers inside isolates. */
 	toolExecutor: ToolExecutor;
@@ -92,7 +97,8 @@ export async function buildFromJson(
 	agent.model(resolvedModelConfig);
 
 	const configuredSkills = getConfiguredSkills(config.skills ?? [], options.skills ?? {});
-	agent.instructions(withSkillCatalog(config.instructions, configuredSkills));
+	const memoryAwareInstructions = withCrossThreadMemoryCapabilityInstruction(config);
+	agent.instructions(withSkillCatalog(memoryAwareInstructions, configuredSkills));
 
 	// Tools
 	if (config.tools) {
@@ -180,6 +186,17 @@ When deciding whether to load a skill:
 - If the relevant skill was already loaded for this request, do not call load_skill again.
 - If no skill clearly matches, do not call load_skill.
 - Do not load a skill just because it is listed here.${baseInstructions ? `\n\n${baseInstructions}` : ''}`;
+}
+
+function withCrossThreadMemoryCapabilityInstruction(config: AgentJsonConfig): string {
+	const crossThreadMemoryEnabled =
+		config.memory?.enabled === true && config.memory.crossThreadFacts?.enabled === true;
+	if (crossThreadMemoryEnabled) return config.instructions;
+
+	const baseInstructions = config.instructions.trimEnd();
+	return `${N8N_CROSS_THREAD_MEMORY_DISABLED_INSTRUCTION}${
+		baseInstructions ? `\n\n${baseInstructions}` : ''
+	}`;
 }
 
 function createLoadSkillTool(skills: ConfiguredSkill[]): BuiltTool {

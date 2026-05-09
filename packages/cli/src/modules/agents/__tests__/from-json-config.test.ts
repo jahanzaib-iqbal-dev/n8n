@@ -151,7 +151,23 @@ describe('buildFromJson()', () => {
 		expect(snap.name).toBe('test-agent');
 		expect(snap.model.provider).toBe('anthropic');
 		expect(snap.model.name).toBe('claude-sonnet-4-5');
-		expect(snap.instructions).toBe('You are a test agent.');
+		expect(snap.instructions).toContain('You are a test agent.');
+	});
+
+	it('tells agents how to answer memory capability questions when cross-thread memory is absent', async () => {
+		const agent = await buildFromJson(
+			makeConfig(),
+			{},
+			{
+				toolExecutor: makeMockToolExecutor(),
+				credentialProvider: makeMockCredentialProvider(),
+				memoryFactory: makeMockMemoryFactory(),
+			},
+		);
+
+		expect(agent.snapshot.instructions).toContain('cross-thread memory is not enabled');
+		expect(agent.snapshot.instructions).toContain('Advanced panel');
+		expect(agent.snapshot.instructions).toContain('remember, recall, or persist facts');
 	});
 
 	it('handles multi-slash model string for aggregator providers', async () => {
@@ -237,6 +253,8 @@ describe('buildFromJson()', () => {
 		expect(instructions).toContain("call load_skill once with that skill's id");
 		expect(instructions).toContain('do not call load_skill again');
 		expect(instructions).toContain('Do not load a skill just because it is listed here');
+		expect(instructions).toContain('cross-thread memory is not enabled');
+		expect(instructions).toContain('Advanced panel');
 		expect(instructions).not.toContain('Extract decisions and action items.');
 	});
 
@@ -629,6 +647,8 @@ describe('buildFromJson()', () => {
 			},
 		});
 		expect(getMemoryConfig(agent)?.crossThreadFacts?.embedder).toBeDefined();
+		expect(agent.snapshot.instructions).not.toContain('cross-thread memory is not enabled');
+		expect(agent.snapshot.instructions).not.toContain('Advanced panel');
 	});
 
 	it('does not resolve embedding credentials when cross-thread facts are disabled', async () => {
