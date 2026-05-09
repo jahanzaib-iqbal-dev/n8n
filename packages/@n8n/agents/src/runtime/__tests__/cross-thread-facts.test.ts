@@ -446,7 +446,7 @@ describe('cross-thread facts', () => {
 		});
 
 		expect(tool.systemInstruction).toContain('what should be remembered');
-		expect(tool.systemInstruction).toContain('Cross-thread fact memory is enabled');
+		expect(tool.systemInstruction).toContain('Memory is enabled');
 		expect(tool.systemInstruction).toContain('durable user facts are extracted automatically');
 		expect(tool.systemInstruction).toContain('Do not claim that you lack memory-write capability');
 		expect(tool.systemInstruction).toContain('recall_memory only reads existing facts');

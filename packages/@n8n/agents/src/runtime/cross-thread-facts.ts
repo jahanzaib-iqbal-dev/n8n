@@ -40,7 +40,7 @@ Return only JSON in this exact shape:
 {"facts":[{"content":"..."}]}`;
 
 export const DEFAULT_RECALL_MEMORY_TOOL_INSTRUCTION = [
-	'Cross-thread fact memory is enabled, and durable user facts are extracted automatically after successful turns.',
+	'Memory is enabled, and durable user facts are extracted automatically after successful turns.',
 	'Relevant facts may already be surfaced in the <memory> section for the current turn.',
 	'recall_memory only reads existing facts; it does not save new facts.',
 	'When the injected facts are insufficient, or the user asks about remembered, previously shared, persistent personal facts, what is already remembered, or what should be remembered, call recall_memory before answering.',

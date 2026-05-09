@@ -169,7 +169,7 @@ describe('buildFromJson()', () => {
 			},
 		);
 
-		expect(agent.snapshot.instructions).toContain('cross-thread memory is not enabled');
+		expect(agent.snapshot.instructions).toContain('Memory is not enabled');
 		expect(agent.snapshot.instructions).toContain('Memory panel');
 		expect(agent.snapshot.instructions).toContain('remember, recall, or persist facts');
 	});
@@ -257,7 +257,7 @@ describe('buildFromJson()', () => {
 		expect(instructions).toContain("call load_skill once with that skill's id");
 		expect(instructions).toContain('do not call load_skill again');
 		expect(instructions).toContain('Do not load a skill just because it is listed here');
-		expect(instructions).toContain('cross-thread memory is not enabled');
+		expect(instructions).toContain('Memory is not enabled');
 		expect(instructions).toContain('Memory panel');
 		expect(instructions).not.toContain('Extract decisions and action items.');
 	});
@@ -658,7 +658,7 @@ describe('buildFromJson()', () => {
 			},
 		});
 		expect(getMemoryConfig(agent)?.crossThreadFacts?.embedder).toBeDefined();
-		expect(agent.snapshot.instructions).not.toContain('cross-thread memory is not enabled');
+		expect(agent.snapshot.instructions).not.toContain('Memory is not enabled');
 		expect(agent.snapshot.instructions).not.toContain('Memory panel');
 	});
 

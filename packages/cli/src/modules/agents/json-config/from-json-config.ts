@@ -63,8 +63,8 @@ const DEFAULT_WORKING_MEMORY_INSTRUCTION = [
 ].join(' ');
 
 const N8N_CROSS_THREAD_MEMORY_DISABLED_INSTRUCTION = [
-	'cross-thread memory is not enabled for this agent.',
-	'If the user asks you to remember, recall, or persist facts across sessions, explain that cross-thread memory is not enabled yet and can be enabled in the Memory panel.',
+	'Memory is not enabled for this agent.',
+	'If the user asks you to remember, recall, or persist facts across sessions, explain that Memory is not enabled yet and can be enabled in the Memory panel.',
 ].join(' ');
 
 const DEFAULT_CROSS_THREAD_FACTS_EMBEDDER = 'openai/text-embedding-3-small';

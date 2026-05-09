@@ -22,9 +22,7 @@ import {
 import N8nOption from '@n8n/design-system/components/N8nOption';
 import { useI18n } from '@n8n/i18n';
 
-import { useUIStore } from '@/app/stores/ui.store';
 import type { AgentJsonConfig } from '../types';
-import { AGENT_CROSS_THREAD_MEMORY_CREDENTIAL_MODAL_KEY } from '../constants';
 import {
 	PROVIDER_CAPABILITIES,
 	REASONING_EFFORT_OPTIONS,
@@ -33,7 +31,6 @@ import {
 import { parseProvider } from '../utils/model-string';
 
 const i18n = useI18n();
-const uiStore = useUIStore();
 
 const props = withDefaults(
 	defineProps<{ config: AgentJsonConfig | null; disabled?: boolean; collapsible?: boolean }>(),
@@ -59,11 +56,6 @@ const reasoningEffort = ref<ReasoningEffort>(
 );
 const toolCallConcurrency = ref(props.config?.config?.toolCallConcurrency ?? 1);
 const requireToolApproval = ref(props.config?.config?.requireToolApproval ?? false);
-const crossThreadFacts = computed(() => props.config?.memory?.crossThreadFacts ?? null);
-const crossThreadMemoryEnabled = computed(() => crossThreadFacts.value?.enabled === true);
-const crossThreadMemoryCredential = computed(() =>
-	crossThreadFacts.value?.enabled ? crossThreadFacts.value.credential : null,
-);
 
 watch(
 	() => props.config,
@@ -130,48 +122,6 @@ function onApprovalToggle(value: boolean) {
 	requireToolApproval.value = value;
 	emit('update:config', {
 		config: { ...props.config?.config, requireToolApproval: value },
-	});
-}
-
-function enableCrossThreadMemory(credentialId: string) {
-	const existingMemory = props.config?.memory;
-	const memory: NonNullable<AgentJsonConfig['memory']> = {
-		...existingMemory,
-		enabled: true,
-		storage: 'n8n',
-		lastMessages: existingMemory?.lastMessages ?? 10,
-		crossThreadFacts: {
-			enabled: true,
-			credential: credentialId,
-		},
-	};
-
-	emit('update:config', { memory });
-}
-
-function disableCrossThreadMemory() {
-	const memory: NonNullable<AgentJsonConfig['memory']> = {
-		...props.config?.memory,
-		enabled: props.config?.memory?.enabled ?? false,
-		storage: 'n8n',
-		crossThreadFacts: { enabled: false },
-	};
-
-	emit('update:config', { memory });
-}
-
-function onCrossThreadMemoryToggle(value: boolean) {
-	if (!value) {
-		disableCrossThreadMemory();
-		return;
-	}
-
-	uiStore.openModalWithData({
-		name: AGENT_CROSS_THREAD_MEMORY_CREDENTIAL_MODAL_KEY,
-		data: {
-			initialValue: crossThreadMemoryCredential.value,
-			onSelect: enableCrossThreadMemory,
-		},
 	});
 }
 
@@ -286,23 +236,6 @@ const thinkingDisabledReason = computed(() =>
 					:disabled="props.disabled"
 					data-testid="agent-require-approval-toggle"
 					@update:model-value="(v) => onApprovalToggle(Boolean(v))"
-				/>
-			</div>
-
-			<div :class="$style.row">
-				<div :class="$style.rowLabel">
-					<N8nText size="small" :bold="true">{{
-						i18n.baseText('agents.builder.advanced.crossThreadMemory.label')
-					}}</N8nText>
-					<N8nText size="xsmall" color="text-light">
-						{{ i18n.baseText('agents.builder.advanced.crossThreadMemory.hint') }}
-					</N8nText>
-				</div>
-				<N8nSwitch2
-					:model-value="crossThreadMemoryEnabled"
-					:disabled="props.disabled"
-					data-testid="agent-cross-thread-memory-toggle"
-					@update:model-value="(v) => onCrossThreadMemoryToggle(Boolean(v))"
 				/>
 			</div>
 		</div>

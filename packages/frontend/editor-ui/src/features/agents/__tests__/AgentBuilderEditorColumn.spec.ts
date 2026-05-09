@@ -2,6 +2,8 @@
 import { describe, it, expect, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
 
+import AgentBuilderEditorColumn from '../components/AgentBuilderEditorColumn.vue';
+
 vi.mock('@n8n/i18n', () => ({
 	useI18n: () => ({
 		baseText: (key: string) =>
@@ -9,9 +11,16 @@ vi.mock('@n8n/i18n', () => ({
 				'agents.builder.memory.title': 'Session Memory',
 				'agents.builder.memory.description':
 					'Keeps recent messages from this session available as context.',
+				'agents.builder.memory.crossThreadFacts.label': 'Memory',
+				'agents.builder.memory.crossThreadFacts.hint':
+					'Remember durable facts across sessions with this agent.',
 				'agents.builder.editorColumn.ariaLabel': 'Agent editor',
 			})[key] ?? key,
 	}),
+}));
+
+vi.mock('@/app/stores/ui.store', () => ({
+	useUIStore: () => ({ openModalWithData: vi.fn() }),
 }));
 
 vi.mock('@n8n/design-system', () => ({
@@ -22,10 +31,7 @@ vi.mock('@n8n/design-system', () => ({
 	N8nText: { template: '<span><slot /></span>', props: ['tag', 'bold', 'size', 'color'] },
 }));
 
-async function mountColumn() {
-	const { default: AgentBuilderEditorColumn } = await import(
-		'../components/AgentBuilderEditorColumn.vue'
-	);
+function mountColumn() {
 	return mount(AgentBuilderEditorColumn, {
 		props: {
 			activeMainTab: 'agent',
@@ -58,13 +64,15 @@ async function mountColumn() {
 }
 
 describe('AgentBuilderEditorColumn', () => {
-	it('renders only the session memory row in the builder memory card', async () => {
-		const wrapper = await mountColumn();
+	it('renders session memory and memory rows in the builder memory card', () => {
+		const wrapper = mountColumn();
 
 		expect(wrapper.text()).toContain('Session Memory');
 		expect(wrapper.text()).toContain(
 			'Keeps recent messages from this session available as context.',
 		);
+		expect(wrapper.text()).toContain('Memory');
+		expect(wrapper.text()).toContain('Remember durable facts across sessions with this agent.');
 		expect(wrapper.text()).not.toContain('Automatic memory');
 		expect(wrapper.find('[data-test-id="agent-observational-memory-toggle"]').exists()).toBe(false);
 	});
