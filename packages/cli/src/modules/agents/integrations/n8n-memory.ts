@@ -1,13 +1,19 @@
+import * as agentsSdk from '@n8n/agents';
 import type {
 	AgentDbMessage,
 	AgentMessage,
 	BuiltMemory,
 	BuiltObservationStore,
+	CrossThreadFact,
+	CrossThreadFactSearchOptions,
+	CrossThreadMemoryScope,
 	MemoryDescriptor,
+	NewCrossThreadFact,
 	NewObservation,
 	Observation,
 	ObservationCursor,
 	ObservationLockHandle,
+	RetrievedCrossThreadFact,
 	ScopeKind,
 	Thread,
 } from '@n8n/agents';
@@ -17,11 +23,13 @@ import { Equal, In, LessThan, LessThanOrEqual, Like, MoreThan } from '@n8n/typeo
 import type { QueryDeepPartialEntity } from '@n8n/typeorm/query-builder/QueryPartialEntity';
 import { UnexpectedError } from 'n8n-workflow';
 
+import { AgentMemoryFactEntity } from '../entities/agent-memory-fact.entity';
 import type { AgentMessageEntity } from '../entities/agent-message.entity';
 import { AgentObservationLockEntity } from '../entities/agent-observation-lock.entity';
 import { AgentObservationEntity } from '../entities/agent-observation.entity';
 import { AgentThreadEntity } from '../entities/agent-thread.entity';
 import { AgentMessageRepository } from '../repositories/agent-message.repository';
+import { AgentMemoryFactRepository } from '../repositories/agent-memory-fact.repository';
 import { AgentObservationCursorRepository } from '../repositories/agent-observation-cursor.repository';
 import { AgentObservationLockRepository } from '../repositories/agent-observation-lock.repository';
 import { AgentObservationRepository } from '../repositories/agent-observation.repository';
@@ -31,11 +39,18 @@ import { AgentThreadRepository } from '../repositories/agent-thread.repository';
 /** Key inside the metadata JSON where working memory content is stored. */
 const WORKING_MEMORY_KEY = 'workingMemory';
 
+type RankCrossThreadFacts = (
+	facts: CrossThreadFact[],
+	query: string,
+	opts?: CrossThreadFactSearchOptions,
+) => RetrievedCrossThreadFact[];
+
 @Service()
 export class N8nMemory implements BuiltMemory, BuiltObservationStore {
 	constructor(
 		private readonly threadRepository: AgentThreadRepository,
 		private readonly messageRepository: AgentMessageRepository,
+		private readonly memoryFactRepository: AgentMemoryFactRepository,
 		private readonly resourceRepository: AgentResourceRepository,
 		private readonly observationRepository: AgentObservationRepository,
 		private readonly observationCursorRepository: AgentObservationCursorRepository,
@@ -166,6 +181,61 @@ export class N8nMemory implements BuiltMemory, BuiltObservationStore {
 			threadId,
 			...(resourceId !== undefined && { resourceId }),
 		});
+	}
+
+	// ── Cross-thread facts ───────────────────────────────────────────────
+
+	async saveCrossThreadFacts(facts: NewCrossThreadFact[]): Promise<CrossThreadFact[]> {
+		const saved: CrossThreadFact[] = [];
+
+		for (const fact of facts) {
+			const existing = await this.memoryFactRepository.findOneBy({
+				agentId: fact.agentId,
+				resourceId: fact.resourceId,
+				contentHash: fact.contentHash,
+			});
+			if (existing) {
+				saved.push(this.toCrossThreadFact(existing));
+				continue;
+			}
+
+			const entity = this.memoryFactRepository.create({
+				agentId: fact.agentId,
+				resourceId: fact.resourceId,
+				content: fact.content,
+				contentHash: fact.contentHash,
+				sourceThreadId: fact.sourceThreadId ?? null,
+				sourceMessageId: fact.sourceMessageId ?? null,
+				embeddingModel: fact.embeddingModel ?? null,
+				embedding: fact.embedding ?? null,
+				metadata: fact.metadata ?? null,
+				createdAt: fact.createdAt,
+			});
+			const persisted = await this.memoryFactRepository.save(entity);
+			saved.push(this.toCrossThreadFact(persisted));
+		}
+
+		return saved;
+	}
+
+	async searchCrossThreadFacts(
+		scope: CrossThreadMemoryScope,
+		query: string,
+		opts?: CrossThreadFactSearchOptions,
+	): Promise<RetrievedCrossThreadFact[]> {
+		const entities = await this.memoryFactRepository.find({
+			where: { agentId: scope.agentId, resourceId: scope.resourceId },
+		});
+
+		const rankCrossThreadFacts = (agentsSdk as { rankCrossThreadFacts: RankCrossThreadFacts })
+			.rankCrossThreadFacts;
+
+		const rankedFacts: RetrievedCrossThreadFact[] = rankCrossThreadFacts(
+			entities.map((entity) => this.toCrossThreadFact(entity)),
+			query,
+			opts,
+		);
+		return rankedFacts;
 	}
 
 	// ── Working memory ───────────────────────────────────────────────────
@@ -387,6 +457,23 @@ export class N8nMemory implements BuiltMemory, BuiltObservationStore {
 			durationMs: entity.durationMs === null ? null : Number(entity.durationMs),
 			schemaVersion: Number(entity.schemaVersion),
 			createdAt: entity.createdAt,
+		};
+	}
+
+	private toCrossThreadFact(entity: AgentMemoryFactEntity): CrossThreadFact {
+		return {
+			id: entity.id,
+			agentId: entity.agentId,
+			resourceId: entity.resourceId,
+			content: entity.content,
+			contentHash: entity.contentHash,
+			createdAt: entity.createdAt,
+			updatedAt: entity.updatedAt,
+			sourceThreadId: entity.sourceThreadId ?? undefined,
+			sourceMessageId: entity.sourceMessageId ?? undefined,
+			embedding: entity.embedding ?? undefined,
+			embeddingModel: entity.embeddingModel ?? undefined,
+			metadata: entity.metadata ?? undefined,
 		};
 	}
 
