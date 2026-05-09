@@ -181,6 +181,7 @@ export interface AgentJsonConfig {
 					halfLifeDays?: number;
 					maxFactsPerTurn?: number;
 					maxFactLength?: number;
+					dedupeSimilarityThreshold?: number | false;
 					embedder: string;
 					credential: string;
 					prompts?: {

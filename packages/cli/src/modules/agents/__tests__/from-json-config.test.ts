@@ -98,6 +98,7 @@ describe('buildFromJson()', () => {
 					crossThreadFacts?: {
 						enabled?: boolean;
 						topK?: number;
+						dedupeSimilarityThreshold?: number | false;
 						embeddingModel?: string;
 						embedder?: unknown;
 						prompts?: {
@@ -166,7 +167,7 @@ describe('buildFromJson()', () => {
 		);
 
 		expect(agent.snapshot.instructions).toContain('cross-thread memory is not enabled');
-		expect(agent.snapshot.instructions).toContain('Advanced panel');
+		expect(agent.snapshot.instructions).toContain('Memory panel');
 		expect(agent.snapshot.instructions).toContain('remember, recall, or persist facts');
 	});
 
@@ -254,7 +255,7 @@ describe('buildFromJson()', () => {
 		expect(instructions).toContain('do not call load_skill again');
 		expect(instructions).toContain('Do not load a skill just because it is listed here');
 		expect(instructions).toContain('cross-thread memory is not enabled');
-		expect(instructions).toContain('Advanced panel');
+		expect(instructions).toContain('Memory panel');
 		expect(instructions).not.toContain('Extract decisions and action items.');
 	});
 
@@ -616,6 +617,7 @@ describe('buildFromJson()', () => {
 					embedder: 'openai/text-embedding-3-small',
 					credential: 'openai-embedding-credential',
 					topK: 7,
+					dedupeSimilarityThreshold: 0.86,
 					prompts: {
 						extraction: 'Extract durable facts.',
 						recallToolInstruction: 'Use recall_memory before answering memory questions.',
@@ -640,6 +642,7 @@ describe('buildFromJson()', () => {
 		expect(getMemoryConfig(agent)?.crossThreadFacts).toMatchObject({
 			enabled: true,
 			topK: 7,
+			dedupeSimilarityThreshold: 0.86,
 			embeddingModel: 'openai/text-embedding-3-small',
 			prompts: {
 				extraction: 'Extract durable facts.',
@@ -648,7 +651,7 @@ describe('buildFromJson()', () => {
 		});
 		expect(getMemoryConfig(agent)?.crossThreadFacts?.embedder).toBeDefined();
 		expect(agent.snapshot.instructions).not.toContain('cross-thread memory is not enabled');
-		expect(agent.snapshot.instructions).not.toContain('Advanced panel');
+		expect(agent.snapshot.instructions).not.toContain('Memory panel');
 	});
 
 	it('does not resolve embedding credentials when cross-thread facts are disabled', async () => {

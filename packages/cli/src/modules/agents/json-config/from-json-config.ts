@@ -64,7 +64,7 @@ const DEFAULT_WORKING_MEMORY_INSTRUCTION = [
 
 const N8N_CROSS_THREAD_MEMORY_DISABLED_INSTRUCTION = [
 	'cross-thread memory is not enabled for this agent.',
-	'If the user asks you to remember, recall, or persist facts across sessions, explain that cross-thread memory is not enabled yet and can be enabled in the Advanced panel.',
+	'If the user asks you to remember, recall, or persist facts across sessions, explain that cross-thread memory is not enabled yet and can be enabled in the Memory panel.',
 ].join(' ');
 
 export interface BuildFromJsonOptions {
@@ -389,6 +389,9 @@ async function resolveCrossThreadFactsConfig(
 		...(config.halfLifeDays !== undefined && { halfLifeDays: config.halfLifeDays }),
 		...(config.maxFactsPerTurn !== undefined && { maxFactsPerTurn: config.maxFactsPerTurn }),
 		...(config.maxFactLength !== undefined && { maxFactLength: config.maxFactLength }),
+		...(config.dedupeSimilarityThreshold !== undefined && {
+			dedupeSimilarityThreshold: config.dedupeSimilarityThreshold,
+		}),
 		embedder: createEmbeddingModel(config.embedder, mapped),
 		embeddingModel: config.embedder,
 		...(config.prompts !== undefined && { prompts: config.prompts }),

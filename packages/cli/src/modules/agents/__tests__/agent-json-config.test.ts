@@ -193,6 +193,7 @@ describe('AgentJsonConfigSchema — memory.crossThreadFacts', () => {
 					embedder: 'openai/text-embedding-3-small',
 					credential: 'openai-credential-id',
 					topK: 8,
+					dedupeSimilarityThreshold: 0.86,
 					prompts: {
 						extraction: 'Extract only durable user facts.',
 						recallToolInstruction: 'Use recall_memory when facts may help.',
@@ -202,6 +203,57 @@ describe('AgentJsonConfigSchema — memory.crossThreadFacts', () => {
 		});
 
 		expect(parsed.success).toBe(true);
+	});
+
+	it('accepts disabled cross-thread fact similarity dedupe', () => {
+		const parsed = AgentJsonConfigSchema.safeParse({
+			...baseConfig,
+			memory: {
+				...memoryBase,
+				crossThreadFacts: {
+					enabled: true,
+					embedder: 'openai/text-embedding-3-small',
+					credential: 'openai-credential-id',
+					dedupeSimilarityThreshold: false,
+				},
+			},
+		});
+
+		expect(parsed.success).toBe(true);
+	});
+
+	it('rejects cross-thread fact similarity thresholds below 0', () => {
+		const parsed = AgentJsonConfigSchema.safeParse({
+			...baseConfig,
+			memory: {
+				...memoryBase,
+				crossThreadFacts: {
+					enabled: true,
+					embedder: 'openai/text-embedding-3-small',
+					credential: 'openai-credential-id',
+					dedupeSimilarityThreshold: -0.1,
+				},
+			},
+		});
+
+		expect(parsed.success).toBe(false);
+	});
+
+	it('rejects cross-thread fact similarity thresholds above 1', () => {
+		const parsed = AgentJsonConfigSchema.safeParse({
+			...baseConfig,
+			memory: {
+				...memoryBase,
+				crossThreadFacts: {
+					enabled: true,
+					embedder: 'openai/text-embedding-3-small',
+					credential: 'openai-credential-id',
+					dedupeSimilarityThreshold: 1.1,
+				},
+			},
+		});
+
+		expect(parsed.success).toBe(false);
 	});
 
 	it('rejects enabled cross-thread facts without a credential reference', () => {

@@ -46,6 +46,7 @@ const CrossThreadFactsConfigSchema = z.discriminatedUnion('enabled', [
 		halfLifeDays: z.number().int().min(1).optional(),
 		maxFactsPerTurn: z.number().int().min(1).max(20).optional(),
 		maxFactLength: z.number().int().min(40).max(2000).optional(),
+		dedupeSimilarityThreshold: z.union([z.number().min(0).max(1), z.literal(false)]).optional(),
 		embedder: z
 			.string()
 			.min(1)
