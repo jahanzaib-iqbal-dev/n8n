@@ -972,8 +972,9 @@ export class AgentsService {
 
 		const recorder = new ExecutionRecorder(toolRegistry);
 
+		const persistence = { threadId, agentId, resourceId };
 		const resultStream = await agentInstance.stream(message, {
-			persistence: { threadId, resourceId },
+			persistence,
 		});
 
 		const reader = resultStream.stream.getReader();
@@ -1102,9 +1103,8 @@ export class AgentsService {
 		const toolCalls: ExecuteAgentData['toolCalls'] = [];
 		const toolInputs = new Map<string, { toolName: string; input: unknown }>();
 
-		const resultStream = await agentInstance.stream(message, {
-			persistence: { resourceId: executionId, threadId },
-		});
+		const persistence = { resourceId: executionId, threadId, agentId };
+		const resultStream = await agentInstance.stream(message, { persistence });
 
 		const reader = resultStream.stream.getReader();
 		try {

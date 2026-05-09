@@ -286,6 +286,14 @@ async function resolveToolRef(
 const DEFAULT_OBSERVATIONAL_COMPACTION_THRESHOLD = 5;
 const DEFAULT_OBSERVATIONAL_GAP_THRESHOLD_MS = 60 * 60_000;
 
+type MemoryWithCrossThreadFacts = Memory & {
+	crossThreadFacts(config: NonNullable<AgentJsonMemoryConfig['crossThreadFacts']>): Memory;
+};
+
+function hasCrossThreadFacts(memory: Memory): memory is MemoryWithCrossThreadFacts {
+	return typeof Reflect.get(memory, 'crossThreadFacts') === 'function';
+}
+
 async function applyMemoryFromConfig(
 	agent: AgentBuilder,
 	memoryConfig: AgentJsonMemoryConfig,
@@ -306,6 +314,13 @@ async function applyMemoryFromConfig(
 
 	if (memoryConfig.semanticRecall) {
 		memory.semanticRecall(memoryConfig.semanticRecall);
+	}
+
+	if (memoryConfig.crossThreadFacts?.enabled === true) {
+		if (!hasCrossThreadFacts(memory)) {
+			throw new Error('crossThreadFacts memory config requires @n8n/agents support.');
+		}
+		memory.crossThreadFacts(memoryConfig.crossThreadFacts);
 	}
 
 	if (memoryConfig.observationalMemory?.enabled !== false) {

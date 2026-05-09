@@ -77,9 +77,8 @@ export class AgentsBuilderService {
 		this.logger.debug('Starting builder agent stream', { agentId, projectId });
 
 		const resourceId = user.id;
-		const resultStream = await builder.stream(message, {
-			persistence: { threadId: builderThreadId(agentId), resourceId },
-		});
+		const persistence = { threadId: builderThreadId(agentId), agentId, resourceId };
+		const resultStream = await builder.stream(message, { persistence });
 
 		yield* this.streamFromAgent(resultStream);
 	}

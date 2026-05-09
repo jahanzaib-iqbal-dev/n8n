@@ -286,5 +286,8 @@ export interface SerializableAgentState {
 
 export type AgentPersistenceOptions = {
 	threadId: string;
+	/** Required when cross-thread facts are enabled. */
+	agentId?: string;
+	/** n8n maps this to the user id for cross-thread facts. */
 	resourceId: string;
 };

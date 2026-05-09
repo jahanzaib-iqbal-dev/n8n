@@ -34,11 +34,22 @@ const ObservationalMemoryConfigSchema = z.object({
 	compactorPrompt: z.string().optional(),
 });
 
+const CrossThreadFactsConfigSchema = z.object({
+	enabled: z.boolean(),
+	topK: z.number().int().min(1).max(100).optional(),
+	halfLifeDays: z.number().int().min(1).optional(),
+	maxFactsPerTurn: z.number().int().min(1).max(20).optional(),
+	maxFactLength: z.number().int().min(40).max(2000).optional(),
+	embedder: z.string().optional(),
+	extractionPrompt: z.string().optional(),
+});
+
 const MemoryConfigSchema = z.object({
 	enabled: z.boolean(),
 	storage: z.enum(['n8n']),
 	lastMessages: z.number().int().min(1).max(200).optional(),
 	semanticRecall: SemanticRecallSchema.optional(),
+	crossThreadFacts: CrossThreadFactsConfigSchema.optional(),
 	observationalMemory: ObservationalMemoryConfigSchema.optional(),
 });
 

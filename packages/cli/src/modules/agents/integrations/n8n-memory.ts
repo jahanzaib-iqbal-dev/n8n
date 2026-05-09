@@ -17,11 +17,13 @@ import { Equal, In, LessThan, LessThanOrEqual, Like, MoreThan } from '@n8n/typeo
 import type { QueryDeepPartialEntity } from '@n8n/typeorm/query-builder/QueryPartialEntity';
 import { UnexpectedError } from 'n8n-workflow';
 
+import { AgentMemoryFactEntity } from '../entities/agent-memory-fact.entity';
 import type { AgentMessageEntity } from '../entities/agent-message.entity';
 import { AgentObservationLockEntity } from '../entities/agent-observation-lock.entity';
 import { AgentObservationEntity } from '../entities/agent-observation.entity';
 import { AgentThreadEntity } from '../entities/agent-thread.entity';
 import { AgentMessageRepository } from '../repositories/agent-message.repository';
+import { AgentMemoryFactRepository } from '../repositories/agent-memory-fact.repository';
 import { AgentObservationCursorRepository } from '../repositories/agent-observation-cursor.repository';
 import { AgentObservationLockRepository } from '../repositories/agent-observation-lock.repository';
 import { AgentObservationRepository } from '../repositories/agent-observation.repository';
@@ -30,12 +32,53 @@ import { AgentThreadRepository } from '../repositories/agent-thread.repository';
 
 /** Key inside the metadata JSON where working memory content is stored. */
 const WORKING_MEMORY_KEY = 'workingMemory';
+const CROSS_THREAD_RRF_K = 60;
+const CROSS_THREAD_DEFAULT_TOP_K = 5;
+const CROSS_THREAD_DEFAULT_HALF_LIFE_DAYS = 180;
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+interface CrossThreadMemoryScope {
+	agentId: string;
+	resourceId: string;
+}
+
+interface CrossThreadFact {
+	id: string;
+	agentId: string;
+	resourceId: string;
+	content: string;
+	contentHash: string;
+	createdAt: Date;
+	updatedAt: Date;
+	sourceThreadId?: string;
+	sourceMessageId?: string;
+	embedding?: number[];
+	embeddingModel?: string;
+	metadata?: Record<string, unknown>;
+}
+
+type NewCrossThreadFact = Omit<CrossThreadFact, 'id' | 'updatedAt'>;
+
+interface CrossThreadFactSearchOptions {
+	topK?: number;
+	halfLifeDays?: number;
+	queryEmbedding?: number[];
+}
+
+interface RetrievedCrossThreadFact extends CrossThreadFact {
+	lexicalScore: number;
+	vectorScore: number;
+	rrfScore: number;
+	recencyFactor: number;
+	finalScore: number;
+}
 
 @Service()
 export class N8nMemory implements BuiltMemory, BuiltObservationStore {
 	constructor(
 		private readonly threadRepository: AgentThreadRepository,
 		private readonly messageRepository: AgentMessageRepository,
+		private readonly memoryFactRepository: AgentMemoryFactRepository,
 		private readonly resourceRepository: AgentResourceRepository,
 		private readonly observationRepository: AgentObservationRepository,
 		private readonly observationCursorRepository: AgentObservationCursorRepository,
@@ -166,6 +209,57 @@ export class N8nMemory implements BuiltMemory, BuiltObservationStore {
 			threadId,
 			...(resourceId !== undefined && { resourceId }),
 		});
+	}
+
+	// ── Cross-thread facts ───────────────────────────────────────────────
+
+	async saveCrossThreadFacts(facts: NewCrossThreadFact[]): Promise<CrossThreadFact[]> {
+		const saved: CrossThreadFact[] = [];
+
+		for (const fact of facts) {
+			const existing = await this.memoryFactRepository.findOneBy({
+				agentId: fact.agentId,
+				resourceId: fact.resourceId,
+				contentHash: fact.contentHash,
+			});
+			if (existing) {
+				saved.push(this.toCrossThreadFact(existing));
+				continue;
+			}
+
+			const entity = this.memoryFactRepository.create({
+				agentId: fact.agentId,
+				resourceId: fact.resourceId,
+				content: fact.content,
+				contentHash: fact.contentHash,
+				sourceThreadId: fact.sourceThreadId ?? null,
+				sourceMessageId: fact.sourceMessageId ?? null,
+				embeddingModel: fact.embeddingModel ?? null,
+				embedding: fact.embedding ?? null,
+				metadata: fact.metadata ?? null,
+				createdAt: fact.createdAt,
+			});
+			const persisted = await this.memoryFactRepository.save(entity);
+			saved.push(this.toCrossThreadFact(persisted));
+		}
+
+		return saved;
+	}
+
+	async searchCrossThreadFacts(
+		scope: CrossThreadMemoryScope,
+		query: string,
+		opts?: CrossThreadFactSearchOptions,
+	): Promise<RetrievedCrossThreadFact[]> {
+		const entities = await this.memoryFactRepository.find({
+			where: { agentId: scope.agentId, resourceId: scope.resourceId },
+		});
+
+		return rankCrossThreadFacts(
+			entities.map((entity) => this.toCrossThreadFact(entity)),
+			query,
+			opts,
+		);
 	}
 
 	// ── Working memory ───────────────────────────────────────────────────
@@ -390,6 +484,23 @@ export class N8nMemory implements BuiltMemory, BuiltObservationStore {
 		};
 	}
 
+	private toCrossThreadFact(entity: AgentMemoryFactEntity): CrossThreadFact {
+		return {
+			id: entity.id,
+			agentId: entity.agentId,
+			resourceId: entity.resourceId,
+			content: entity.content,
+			contentHash: entity.contentHash,
+			createdAt: entity.createdAt,
+			updatedAt: entity.updatedAt,
+			...(entity.sourceThreadId !== null && { sourceThreadId: entity.sourceThreadId }),
+			...(entity.sourceMessageId !== null && { sourceMessageId: entity.sourceMessageId }),
+			...(entity.embedding !== null && { embedding: entity.embedding }),
+			...(entity.embeddingModel !== null && { embeddingModel: entity.embeddingModel }),
+			...(entity.metadata !== null && { metadata: entity.metadata }),
+		};
+	}
+
 	private toThread(entity: AgentThreadEntity): Thread {
 		let metadata: Record<string, unknown> | undefined;
 		if (entity.metadata) {
@@ -469,4 +580,115 @@ export class N8nMemory implements BuiltMemory, BuiltObservationStore {
 			}),
 		);
 	}
+}
+
+function rankCrossThreadFacts(
+	facts: CrossThreadFact[],
+	query: string,
+	opts: CrossThreadFactSearchOptions = {},
+): RetrievedCrossThreadFact[] {
+	const topK = opts.topK ?? CROSS_THREAD_DEFAULT_TOP_K;
+	const queryTokens = tokenize(query);
+	const lexical = facts
+		.map((fact) => ({ fact, score: lexicalScore(queryTokens, tokenize(fact.content)) }))
+		.filter((item) => item.score > 0)
+		.sort((a, b) => b.score - a.score);
+	const vector = facts
+		.map((fact) => ({
+			fact,
+			score:
+				opts.queryEmbedding && fact.embedding
+					? cosineSimilarity(opts.queryEmbedding, fact.embedding)
+					: 0,
+		}))
+		.filter((item) => item.score > 0)
+		.sort((a, b) => b.score - a.score);
+
+	const scores = new Map<
+		string,
+		{
+			fact: CrossThreadFact;
+			lexicalScore: number;
+			vectorScore: number;
+			rrfScore: number;
+		}
+	>();
+	for (const fact of facts) {
+		scores.set(fact.id, { fact, lexicalScore: 0, vectorScore: 0, rrfScore: 0 });
+	}
+
+	for (let rank = 0; rank < lexical.length; rank++) {
+		const entry = scores.get(lexical[rank].fact.id);
+		if (!entry) continue;
+		entry.lexicalScore = lexical[rank].score;
+		entry.rrfScore += 1 / (CROSS_THREAD_RRF_K + rank + 1);
+	}
+
+	for (let rank = 0; rank < vector.length; rank++) {
+		const entry = scores.get(vector[rank].fact.id);
+		if (!entry) continue;
+		entry.vectorScore = vector[rank].score;
+		entry.rrfScore += 1 / (CROSS_THREAD_RRF_K + rank + 1);
+	}
+
+	return [...scores.values()]
+		.map((entry) => {
+			const recencyFactor = computeRecencyFactor(entry.fact.createdAt, opts.halfLifeDays);
+			const fallbackScore = entry.rrfScore > 0 ? entry.rrfScore : recencyFactor * 0.0001;
+			return {
+				...entry.fact,
+				lexicalScore: entry.lexicalScore,
+				vectorScore: entry.vectorScore,
+				rrfScore: entry.rrfScore,
+				recencyFactor,
+				finalScore: fallbackScore * recencyFactor,
+			};
+		})
+		.sort((a, b) => b.finalScore - a.finalScore)
+		.slice(0, topK);
+}
+
+function tokenize(text: string): string[] {
+	return text
+		.toLowerCase()
+		.split(/[^a-z0-9]+/)
+		.filter((token) => token.length > 1);
+}
+
+function lexicalScore(queryTokens: string[], contentTokens: string[]): number {
+	if (queryTokens.length === 0 || contentTokens.length === 0) return 0;
+	const contentCounts = new Map<string, number>();
+	for (const token of contentTokens) {
+		contentCounts.set(token, (contentCounts.get(token) ?? 0) + 1);
+	}
+
+	let score = 0;
+	for (const token of queryTokens) {
+		score += contentCounts.get(token) ?? 0;
+	}
+
+	return score / Math.sqrt(contentTokens.length);
+}
+
+function cosineSimilarity(a: number[], b: number[]): number {
+	if (a.length !== b.length || a.length === 0) return 0;
+	let dot = 0;
+	let aMagnitude = 0;
+	let bMagnitude = 0;
+	for (let i = 0; i < a.length; i++) {
+		dot += a[i] * b[i];
+		aMagnitude += a[i] * a[i];
+		bMagnitude += b[i] * b[i];
+	}
+	if (aMagnitude === 0 || bMagnitude === 0) return 0;
+	return dot / (Math.sqrt(aMagnitude) * Math.sqrt(bMagnitude));
+}
+
+function computeRecencyFactor(
+	createdAt: Date,
+	halfLifeDays = CROSS_THREAD_DEFAULT_HALF_LIFE_DAYS,
+): number {
+	if (halfLifeDays <= 0) return 1;
+	const ageDays = Math.max(0, Date.now() - createdAt.getTime()) / MS_PER_DAY;
+	return Math.pow(0.5, ageDays / halfLifeDays);
 }

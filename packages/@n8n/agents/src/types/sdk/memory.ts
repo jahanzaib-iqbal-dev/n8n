@@ -96,11 +96,86 @@ export interface BuiltMemory {
 		vector: number[];
 		topK: number;
 	}): Promise<Array<{ id: string; score: number }>>;
+	// --- Cross-thread fact memory (optional) ---
+	saveCrossThreadFacts?(facts: NewCrossThreadFact[]): Promise<CrossThreadFact[]>;
+	searchCrossThreadFacts?(
+		scope: CrossThreadMemoryScope,
+		query: string,
+		opts?: CrossThreadFactSearchOptions,
+	): Promise<RetrievedCrossThreadFact[]>;
 	// --- Lifecycle (optional) ---
 	/** Close the connection pool / release resources. No-op for in-memory backends. */
 	close?(): Promise<void>;
 	/** Return a serializable descriptor of this backend for schema persistence. */
 	describe(): MemoryDescriptor;
+}
+
+export interface CrossThreadMemoryScope {
+	agentId: string;
+	/** n8n maps this to the user id for cross-thread facts. */
+	resourceId: string;
+}
+
+export interface CrossThreadFact {
+	id: string;
+	agentId: string;
+	resourceId: string;
+	content: string;
+	contentHash: string;
+	createdAt: Date;
+	updatedAt: Date;
+	sourceThreadId?: string;
+	sourceMessageId?: string;
+	embedding?: number[];
+	embeddingModel?: string;
+	metadata?: JSONObject;
+}
+
+export type NewCrossThreadFact = Omit<CrossThreadFact, 'id' | 'updatedAt'>;
+
+export interface RetrievedCrossThreadFact extends CrossThreadFact {
+	lexicalScore: number;
+	vectorScore: number;
+	rrfScore: number;
+	recencyFactor: number;
+	finalScore: number;
+}
+
+export interface CrossThreadFactSearchOptions {
+	topK?: number;
+	halfLifeDays?: number;
+	queryEmbedding?: number[];
+}
+
+export interface BuiltCrossThreadFactStore {
+	saveCrossThreadFacts(facts: NewCrossThreadFact[]): Promise<CrossThreadFact[]>;
+	searchCrossThreadFacts(
+		scope: CrossThreadMemoryScope,
+		query: string,
+		opts?: CrossThreadFactSearchOptions,
+	): Promise<RetrievedCrossThreadFact[]>;
+}
+
+export interface CrossThreadFactsConfig {
+	/**
+	 * False disables an otherwise persisted JSON config. Calling `Memory.crossThreadFacts()`
+	 * enables the feature by default.
+	 */
+	enabled?: boolean;
+	/** @default 5 */
+	topK?: number;
+	/** @default 180 */
+	halfLifeDays?: number;
+	/** @default 5 */
+	maxFactsPerTurn?: number;
+	/** @default 240 */
+	maxFactLength?: number;
+	/** @default 'openai/text-embedding-3-small' */
+	embedder?: string;
+	/** API key for the embedder provider. Falls back to environment variables if not set. */
+	apiKey?: string;
+	/** Custom fact extraction instructions. Replaces the defaults entirely. */
+	extractionPrompt?: string;
 }
 
 // --- Semantic Recall Config ---
@@ -140,6 +215,7 @@ export interface MemoryConfig {
 		instruction?: string;
 	};
 	semanticRecall?: SemanticRecallConfig;
+	crossThreadFacts?: CrossThreadFactsConfig;
 	titleGeneration?: TitleGenerationConfig;
 	observationalMemory?: ObservationalMemoryConfig;
 }

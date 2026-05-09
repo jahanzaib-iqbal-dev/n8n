@@ -3,11 +3,13 @@ import { Equal, In, LessThan, LessThanOrEqual, MoreThan } from '@n8n/typeorm';
 import { mock } from 'jest-mock-extended';
 
 import type { AgentMessageEntity } from '../../entities/agent-message.entity';
+import type { AgentMemoryFactEntity } from '../../entities/agent-memory-fact.entity';
 import type { AgentObservationCursorEntity } from '../../entities/agent-observation-cursor.entity';
 import type { AgentObservationLockEntity } from '../../entities/agent-observation-lock.entity';
 import type { AgentObservationEntity } from '../../entities/agent-observation.entity';
 import type { AgentThreadEntity } from '../../entities/agent-thread.entity';
 import type { AgentMessageRepository } from '../../repositories/agent-message.repository';
+import type { AgentMemoryFactRepository } from '../../repositories/agent-memory-fact.repository';
 import type { AgentObservationCursorRepository } from '../../repositories/agent-observation-cursor.repository';
 import type { AgentObservationLockRepository } from '../../repositories/agent-observation-lock.repository';
 import type { AgentObservationRepository } from '../../repositories/agent-observation.repository';
@@ -18,6 +20,7 @@ import { N8nMemory } from '../n8n-memory';
 describe('N8nMemory', () => {
 	let memory: N8nMemory;
 	let messageRepository: jest.Mocked<AgentMessageRepository>;
+	let memoryFactRepository: jest.Mocked<AgentMemoryFactRepository>;
 	let threadRepository: jest.Mocked<AgentThreadRepository>;
 	let resourceRepository: jest.Mocked<AgentResourceRepository>;
 	let observationRepository: jest.Mocked<AgentObservationRepository>;
@@ -28,6 +31,7 @@ describe('N8nMemory', () => {
 		jest.clearAllMocks();
 
 		messageRepository = mock<AgentMessageRepository>();
+		memoryFactRepository = mock<AgentMemoryFactRepository>();
 		threadRepository = mock<AgentThreadRepository>();
 		resourceRepository = mock<AgentResourceRepository>();
 		observationRepository = mock<AgentObservationRepository>();
@@ -37,6 +41,7 @@ describe('N8nMemory', () => {
 		memory = new N8nMemory(
 			threadRepository,
 			messageRepository,
+			memoryFactRepository,
 			resourceRepository,
 			observationRepository,
 			observationCursorRepository,
@@ -61,6 +66,74 @@ describe('N8nMemory', () => {
 			updatedAt: createdAt,
 		} as unknown as AgentMessageEntity;
 	}
+
+	function makeMemoryFactEntity(
+		id: string,
+		content: string,
+		createdAt = new Date('2026-01-01T00:00:00.000Z'),
+	): AgentMemoryFactEntity {
+		return {
+			id,
+			agentId: 'agent-1',
+			resourceId: 'user-1',
+			content,
+			contentHash: `hash-${id}`,
+			sourceThreadId: 'thread-1',
+			sourceMessageId: 'message-1',
+			embeddingModel: 'openai/text-embedding-3-small',
+			embedding: [1, 0],
+			metadata: null,
+			createdAt,
+			updatedAt: createdAt,
+		} as unknown as AgentMemoryFactEntity;
+	}
+
+	describe('cross-thread facts', () => {
+		it('dedupes facts by agent, resource, and content hash', async () => {
+			const existing = makeMemoryFactEntity('fact-1', 'The user likes precise docs.');
+			memoryFactRepository.findOneBy.mockResolvedValue(existing);
+
+			const result = await memory.saveCrossThreadFacts([
+				{
+					agentId: 'agent-1',
+					resourceId: 'user-1',
+					content: 'The user likes precise docs.',
+					contentHash: 'hash-fact-1',
+					createdAt: existing.createdAt,
+				},
+			]);
+
+			expect(memoryFactRepository.findOneBy).toHaveBeenCalledWith({
+				agentId: 'agent-1',
+				resourceId: 'user-1',
+				contentHash: 'hash-fact-1',
+			});
+			expect(memoryFactRepository.save).not.toHaveBeenCalled();
+			expect(result).toHaveLength(1);
+			expect(result[0].id).toBe('fact-1');
+		});
+
+		it('searches only within agentId and resourceId scope', async () => {
+			const expected = makeMemoryFactEntity('fact-1', 'The user prefers concise answers.');
+			const other = {
+				...makeMemoryFactEntity('fact-2', 'The user has a different preference.'),
+				embedding: [0, 1],
+			};
+			memoryFactRepository.find.mockResolvedValue([other, expected]);
+
+			const result = await memory.searchCrossThreadFacts(
+				{ agentId: 'agent-1', resourceId: 'user-1' },
+				'concise answers',
+				{ queryEmbedding: [1, 0], topK: 1 },
+			);
+
+			expect(memoryFactRepository.find).toHaveBeenCalledWith({
+				where: { agentId: 'agent-1', resourceId: 'user-1' },
+			});
+			expect(result).toHaveLength(1);
+			expect(result[0].id).toBe('fact-1');
+		});
+	});
 
 	describe('getMessages — resourceId filter', () => {
 		beforeEach(() => {

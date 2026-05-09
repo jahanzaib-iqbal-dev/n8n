@@ -174,6 +174,15 @@ export interface AgentJsonConfig {
 			messageRange?: { before: number; after: number };
 			embedder?: string;
 		};
+		crossThreadFacts?: {
+			enabled: boolean;
+			topK?: number;
+			halfLifeDays?: number;
+			maxFactsPerTurn?: number;
+			maxFactLength?: number;
+			embedder?: string;
+			extractionPrompt?: string;
+		};
 		observationalMemory?: {
 			enabled?: boolean;
 			trigger?:
