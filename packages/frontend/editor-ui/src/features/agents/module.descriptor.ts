@@ -5,6 +5,7 @@ import {
 	AGENTS_LIST_VIEW,
 	AGENT_BUILDER_SETTINGS_VIEW,
 	AGENT_BUILDER_VIEW,
+	AGENT_CROSS_THREAD_MEMORY_CREDENTIAL_MODAL_KEY,
 	AGENT_TOOLS_MODAL_KEY,
 	AGENT_TOOL_CONFIG_MODAL_KEY,
 	AGENT_SKILL_MODAL_KEY,
@@ -83,6 +84,17 @@ export const AgentsModule: FrontendModuleDescription = {
 					connectedTriggers: [],
 					onConnectedTriggersChange: () => {},
 					onTriggerAdded: () => {},
+				},
+			},
+		},
+		{
+			key: AGENT_CROSS_THREAD_MEMORY_CREDENTIAL_MODAL_KEY,
+			component: async () => await import('./components/AgentCrossThreadMemoryCredentialModal.vue'),
+			initialState: {
+				open: false,
+				data: {
+					initialValue: null,
+					onSelect: () => {},
 				},
 			},
 		},
